@@ -948,7 +948,16 @@ async function startLoad() {
   setP(40, 'Stap 3/3: sportscholen ophalen via OpenStreetMap...');
   const bbox = '50.7,3.3,53.6,7.3';
   // Alleen nodes (sneller), 2 parallelle endpoints als fallback
-  const q = '[out:json][timeout:45];(node["leisure"="fitness_centre"](' + bbox + ');node["amenity"="gym"](' + bbox + '););out 2500;';
+  const q = '[out:json][timeout:55];(' +
+    'node["leisure"="fitness_centre"](' + bbox + ');' +
+    'node["leisure"="sports_centre"]["sport"~"fitness|gym|crossfit|bodybuilding"](' + bbox + ');' +
+    'node["amenity"="gym"](' + bbox + ');' +
+    'node["sport"="fitness"](' + bbox + ');' +
+    'way["leisure"="fitness_centre"](' + bbox + ');' +
+    'way["amenity"="gym"](' + bbox + ');' +
+    'way["leisure"="sports_centre"]["sport"~"fitness|gym|crossfit|bodybuilding"](' + bbox + ');' +
+    'way["sport"="fitness"](' + bbox + ');' +
+    ');out center 4000;';
   const overpassEndpoints = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
