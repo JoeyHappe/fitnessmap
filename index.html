@@ -735,7 +735,19 @@ header p { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .no-data { padding: 16px; font-size: 12px; color: var(--muted); text-align: center; }
 .error-msg { font-size: 12px; color: #b83232; margin-top: 8px; padding: 7px 10px; background: #fdecea; border-radius: 6px; border: 1px solid #f5c2c2; }
 
-  .cards-strip { background: var(--surface); border-top: 1px solid var(--border); padding: 12px 16px; overflow-x: auto; white-space: nowrap; flex-shrink: 0; height: 110px; display: flex; align-items: center; gap: 10px; }
+  .cards-panel { background: var(--surface); border-top: 1px solid var(--border); padding: 14px 16px; flex-shrink: 0; overflow-y: auto; max-height: 280px; }
+  .cards-panel-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .9px; color: var(--muted); margin-bottom: 10px; }
+  .cards-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .opp-card { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: all .15s; display: flex; justify-content: space-between; align-items: flex-start; }
+  .opp-card:hover { border-color: var(--accent); background: var(--accent-light); transform: translateY(-1px); }
+  .opp-card.rank-1 { border-color: #1a5c2a; background: #e8f5ea; border-width: 2px; }
+  .opp-card-left { flex: 1; min-width: 0; }
+  .opp-card-name { font-size: 12px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .opp-card-meta { font-size: 10px; color: var(--muted); margin-top: 3px; line-height: 1.5; }
+  .opp-card-right { text-align: right; flex-shrink: 0; margin-left: 8px; }
+  .opp-card-score { font-size: 22px; font-weight: 700; color: var(--accent); line-height: 1; }
+  .opp-card-sublabel { font-size: 9px; color: var(--muted); }
+  .cards-title { display: none; }
   .cards-strip::-webkit-scrollbar { height: 4px; }
   .cards-strip::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
   .opp-card { display: inline-flex; flex-direction: column; justify-content: space-between; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; min-width: 150px; max-width: 150px; cursor: pointer; transition: all .15s; vertical-align: top; white-space: normal; height: 84px; flex-shrink: 0; }
@@ -744,7 +756,7 @@ header p { font-size: 11px; color: var(--muted); margin-top: 1px; }
   .opp-card-name { font-size: 12px; font-weight: 600; color: var(--text); line-height: 1.3; }
   .opp-card-meta { font-size: 10px; color: var(--muted); margin-top: 3px; }
   .opp-card-score { font-size: 18px; font-weight: 700; color: var(--accent); line-height: 1; }
-  .opp-card-label { font-size: 9px; color: var(--muted); margin-top: 1px; }
+
   .cards-title { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); writing-mode: vertical-lr; transform: rotate(180deg); flex-shrink: 0; padding: 0 4px; }
 </style>
 </head>
@@ -764,7 +776,6 @@ header p { font-size: 11px; color: var(--muted); margin-top: 1px; }
 </header>
 
 <div class="layout">
-  <div class="main-area">
   <div class="sidebar">
 
     <div class="section">
@@ -833,14 +844,16 @@ header p { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
   </div>
 
+  </div>
+  <div class="right-panel">
   <div class="map-wrap">
     <div id="map"></div>
   </div>
-  </div>
 
-  <div class="cards-strip" id="cards-strip">
-    <span class="cards-title">Top kansen</span>
-    <div style="font-size:12px;color:var(--muted);padding:0 8px;">Laad data om de top kansen te zien</div>
+  <div class="cards-panel" id="cards-strip">
+    <div class="cards-panel-title">Top 15 kansen — klik op een gemeente om in te zoomen</div>
+    <div class="cards-grid" id="cards-grid"><div style="font-size:12px;color:var(--muted);">Laad data om de top kansen te zien</div></div>
+  </div>
   </div>
 </div>
 
@@ -1201,25 +1214,25 @@ function buildTopList() {
     .sort(function(a,b){ return b.properties._score - a.properties._score; })
     .slice(0, 20);
 
-  var html = '<span class="cards-title">Top kansen</span>';
+  var html = '';
   sorted.forEach(function(f, i) {
     var p = f.properties, s = p._score||0;
     var c = getCentroid(f);
     var inwGym = p._gc > 0 ? Math.round((p._pop||0)/p._gc).toLocaleString('nl-NL') : '–';
     var isTop = i === 0 ? ' rank-1' : '';
-    html += '<div class="opp-card' + isTop + '" onclick="MAP.setView(['+c[0]+','+c[1]+'],12)" title="Klik om in te zoomen">' +
-      '<div>' +
+    html += '<div class="opp-card' + isTop + '" onclick="MAP.setView(['+c[0]+','+c[1]+'],12)">' +
+      '<div class="opp-card-left">' +
         '<div class="opp-card-name">' + (i+1) + '. ' + p._name + '</div>' +
-        '<div class="opp-card-meta">' + (p._pop||0).toLocaleString('nl-NL') + ' inw. · ' + (p._gc||0) + ' gyms</div>' +
-        '<div class="opp-card-meta">' + inwGym + ' inw/gym</div>' +
+        '<div class="opp-card-meta">' + (p._pop||0).toLocaleString('nl-NL') + ' inw.<br>' + (p._gc||0) + ' gyms · ' + inwGym + ' inw/gym</div>' +
       '</div>' +
-      '<div>' +
+      '<div class="opp-card-right">' +
         '<div class="opp-card-score">' + s + '</div>' +
-        '<div class="opp-card-label">/ 100</div>' +
+        '<div class="opp-card-sublabel">/100</div>' +
       '</div>' +
     '</div>';
   });
-  document.getElementById('cards-strip').innerHTML = html;
+  document.getElementById('cards-panel-title') && (document.getElementById('cards-panel-title').style.display='block');
+  document.getElementById('cards-grid').innerHTML = html;
 }
 
 function toggleDots(el) {
