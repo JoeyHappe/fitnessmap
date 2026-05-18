@@ -816,8 +816,8 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-sy
 /* === KANSEN TAB === */
 #tab-kansen { flex: 1; overflow-y: auto; padding: 16px; display: none; }
 #kansen-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-.opp-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; cursor: pointer; display: flex; justify-content: space-between; align-items: flex-start; transition: all .12s; }
-.opp-card:hover { border-color: var(--accent); background: var(--accent-light); }
+.opp-card { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; transition: all .12s; }
+.opp-card:hover { border-color: var(--accent); }
 .opp-card.top3 { border: 2px solid var(--accent); background: var(--accent-light); }
 .opp-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
 .opp-meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
@@ -1073,7 +1073,19 @@ async function startLoad() {
   }
   dbg('ok','Google Places klaar: '+gyms.length+' locaties');
 
-  setP(92,'Scores berekenen...');
+  setP(92,'Scores berekenen en gyms koppelen...');
+  // Koppel gymnamen per gemeente
+  if (geoData && gyms.length>0) {
+    geoData.features.forEach(function(f){
+      var c=getCentroid(f);
+      var names=[];
+      gyms.forEach(function(g){
+        if(Math.abs(g.lat-c[0])>.3||Math.abs(g.lon-c[1])>.4) return;
+        if(ptIn(g.lon,g.lat,f.geometry)) names.push(g.name);
+      });
+      f.properties._gymNames=names;
+    });
+  }
   computeScores();
   renderMap();
   buildTopList();
@@ -1111,21 +1123,39 @@ function countIn(f,c) {
 
 function computeScores() {
   if (!geoData) return;
-  var opp=0,sat=0;
+
+  // Stap 1: bereken ratio per gemeente
+  var ratioMap = {};
   geoData.features.forEach(function(f){
     var code=((f.properties.statcode||f.properties.GM_CODE||'')).trim();
     var name=f.properties.statnaam||f.properties.GM_NAAM||'';
     var pop=CBS_POP[code]||0;
     var c=getCentroid(f);
     var gc=gyms.length>0?countIn(f,c):0;
-    var score=0;
-    if(pop>=10000){
-      if(gc===0) score=Math.min(90,Math.round(50+(pop-NL_AVG)/NL_AVG*20));
-      else { var ratio=pop/gc; score=Math.round(50+(ratio-NL_AVG)/NL_AVG*35); score=Math.max(5,Math.min(100,score)); }
-    }
-    f.properties._code=code;f.properties._name=name;f.properties._pop=pop;f.properties._gc=gc;f.properties._score=score;
+    f.properties._code=code;f.properties._name=name;f.properties._pop=pop;f.properties._gc=gc;
+    // Inwoners per gym — hoog = kans, laag = verzadigd
+    var ratio = (pop>=10000 && gc>0) ? pop/gc : (pop>=10000 && gc===0 ? pop*1.5 : 0);
+    f.properties._ratio = ratio;
+    if (pop>=10000) ratioMap[code] = ratio;
+  });
+
+  // Stap 2: percentiel-score — eerlijk vergelijken binnen NL
+  var ratios = Object.values(ratioMap).filter(function(r){ return r>0; }).sort(function(a,b){return a-b;});
+  var len = ratios.length;
+  function percentileScore(ratio) {
+    if (!ratio || ratio<=0) return 0;
+    var pos = ratios.filter(function(r){ return r<=ratio; }).length;
+    return Math.round((pos/len)*100);
+  }
+
+  var opp=0,sat=0;
+  geoData.features.forEach(function(f){
+    var pop=f.properties._pop||0;
+    var ratio=f.properties._ratio||0;
+    var score = pop>=10000 ? percentileScore(ratio) : 0;
+    f.properties._score=score;
     if(score>70&&pop>15000) opp++;
-    if(gc>8&&score<40) sat++;
+    if(f.properties._gc>8&&score<40) sat++;
   });
   document.getElementById('s-opp').textContent=opp;
   document.getElementById('s-sat').textContent=sat;
@@ -1188,28 +1218,55 @@ function setMode(m){
   if(geoData) renderMap();
 }
 
-function zoomToCard(el){
-  var lat=parseFloat(el.getAttribute('data-lat'));
-  var lon=parseFloat(el.getAttribute('data-lon'));
-  showTab('map');
-  setTimeout(function(){ MAP.setView([lat,lon],12); }, 60);
-}
+
 function buildTopList(){
   if(!geoData) return;
-  var sorted=geoData.features.filter(function(f){return(f.properties._pop||0)>15000&&(f.properties._score||0)>0;})
-    .sort(function(a,b){return b.properties._score-a.properties._score;}).slice(0,20);
+  var sorted=geoData.features
+    .filter(function(f){return(f.properties._pop||0)>15000&&(f.properties._score||0)>=50;})
+    .sort(function(a,b){return b.properties._score-a.properties._score;})
+    .slice(0,30);
   var html='';
   sorted.forEach(function(f,i){
     var p=f.properties,s=p._score||0;
     var c=getCentroid(f);
     var iwg=p._gc>0?Math.round((p._pop||0)/p._gc).toLocaleString('nl-NL'):'–';
-    var topCls=i<3?' top3':'';
-    html+='<div class="opp-card'+topCls+'" data-lat="'+c[0]+'" data-lon="'+c[1]+'" onclick="zoomToCard(this)">'+
-      '<div><div class="opp-name">'+(i+1)+'. '+p._name+'</div>'+
-      '<div class="opp-meta">'+(p._pop||0).toLocaleString('nl-NL')+' inw.<br>'+(p._gc||0)+' gyms &nbsp;·&nbsp; '+iwg+' inw/gym</div></div>'+
-      '<div><div class="opp-score">'+s+'</div><div class="opp-sub">/100</div></div></div>';
+    var topCls=s>=85?' top3':'';
+    var names=p._gymNames||[];
+    var gymList=names.length>0
+      ? names.slice(0,10).map(function(n){return '<span style="display:inline-block;background:#e8f5ea;border:1px solid #c8e0cc;border-radius:4px;padding:2px 7px;font-size:10px;margin:2px 2px 0 0;">'+n+'</span>';}).join('')+(names.length>10?'<span style="font-size:10px;color:var(--muted);"> +'+( names.length-10)+' meer</span>':'')
+      : '<span style="font-size:11px;color:var(--muted);">Geen gyms gevonden in OSM</span>';
+    html+='<div class="opp-card'+topCls+'" id="card-'+i+'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;" onclick="toggleCard('+i+','+c[0]+','+c[1]+')">'
+        +'<div><div class="opp-name">'+(i+1)+'. '+p._name+'</div>'
+        +'<div class="opp-meta">'+(p._pop||0).toLocaleString('nl-NL')+' inw. &nbsp;·&nbsp; '+(p._gc||0)+' gyms &nbsp;·&nbsp; '+iwg+' inw/gym</div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px;">'
+          +'<div style="text-align:right;"><div class="opp-score">'+s+'</div><div class="opp-sub">/100</div></div>'
+          +'<div style="font-size:18px;color:var(--muted);line-height:1;" id="chevron-'+i+'">▸</div>'
+        +'</div>'
+      +'</div>'
+      +'<div id="detail-'+i+'" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+        +'<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);margin-bottom:6px;">Bestaande sportscholen in '+p._name+'</div>'
+        +gymList
+        +'<div style="margin-top:10px;">'
+          +'<button onclick="zoomToCard('+c[0]+','+c[1]+')" style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid var(--accent);color:var(--accent);background:none;cursor:pointer;">Bekijk op kaart →</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
   });
   document.getElementById('kansen-grid').innerHTML=html||'<p style="color:var(--muted)">Geen data.</p>';
+}
+
+function toggleCard(i,lat,lon){
+  var detail=document.getElementById('detail-'+i);
+  var chev=document.getElementById('chevron-'+i);
+  var open=detail.style.display==='none';
+  detail.style.display=open?'block':'none';
+  chev.textContent=open?'▾':'▸';
+}
+
+function zoomToCard(lat,lon){
+  showTab('map');
+  setTimeout(function(){ MAP.setView([lat,lon],13); MAP.invalidateSize(); },60);
 }
 
 function toggleDots(el){ el.checked?dotLayer.addTo(MAP):MAP.removeLayer(dotLayer); }
