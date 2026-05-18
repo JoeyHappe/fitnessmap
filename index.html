@@ -946,60 +946,90 @@ async function startLoad() {
   }
 
   setP(40, 'Stap 3/3: sportscholen ophalen via OpenStreetMap...');
-  const bbox = '50.7,3.3,53.6,7.3';
-  const q1 = '[out:json][timeout:38];(node["leisure"="fitness_centre"](' + bbox + ');node["amenity"="gym"](' + bbox + '););out 3000;';
-  const q2 = '[out:json][timeout:38];(way["leisure"="fitness_centre"](' + bbox + ');way["amenity"="gym"](' + bbox + ');node["sport"="fitness"](' + bbox + '););out center 2000;';
-  const overpassEndpoints = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
-    'https://overpass.openstreetmap.ru/api/interpreter',
-  ];
+  const GOOGLE_API_KEY = 'AIzaSyDBhNnhYMA73oOQ-e5Xkr4J1SmLYmdOFIo';
 
-  async function runQuery(q) {
-    for (var oi = 0; oi < overpassEndpoints.length; oi++) {
-      try {
-        var r = await fetchWithTimeout(overpassEndpoints[oi], {
-          method: 'POST', mode: 'cors',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'data=' + encodeURIComponent(q)
-        }, 40000);
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        var d = await r.json();
-        dbg('ok', 'Overpass OK via endpoint ' + oi + ': ' + d.elements.length + ' elementen');
-        return d.elements;
-      } catch(e) {
-        dbg('err', 'Overpass endpoint ' + oi + ' FOUT: ' + e.message);
+  // Haal centroids op van alle gemeenten met >15k inwoners
+  var gemeentenToSearch = [];
+  if (geoData) {
+    geoData.features.forEach(function(f) {
+      var pop = f.properties._pop || 0;
+      if (pop >= 15000) {
+        var c = getCentroid(f);
+        gemeentenToSearch.push({ name: f.properties._name, lat: c[0], lon: c[1], pop: pop });
       }
-    }
-    return [];
+    });
   }
 
-  setP(50, 'Stap 3/3: sportscholen ophalen (deel 1/2)...');
-  var els1 = await runQuery(q1);
-  setP(68, 'Sportscholen ophalen (deel 2/2)...');
-  var els2 = await runQuery(q2);
+  dbg('info', 'Google Places: ' + gemeentenToSearch.length + ' gemeenten doorzoeken...');
 
   var seen = {};
-  gyms = els1.concat(els2).filter(function(e) {
-    var lat = e.lat || (e.center && e.center.lat);
-    var lon = e.lon || (e.center && e.center.lon);
-    if (!lat) return false;
-    var key = Math.round(lat*10000) + '_' + Math.round(lon*10000);
-    if (seen[key]) return false;
-    seen[key] = true;
-    return true;
-  }).map(function(e) {
-    return { lat: e.lat||(e.center&&e.center.lat), lon: e.lon||(e.center&&e.center.lon), name: (e.tags&&e.tags.name)||'Sportschool' };
-  });
+  var totalFound = 0;
 
-  dbg('ok', 'Gyms geladen: ' + gyms.length + ' unieke locaties');
-  document.getElementById('s-gyms').textContent = gyms.length > 0 ? gyms.length : 'n.v.t.';
-  gyms.forEach(function(g) {
-    L.circleMarker([g.lat, g.lon], { radius: 4, fillColor: '#2d7a3a', color: '#fff', weight: 1.5, fillOpacity: .9 })
-      .bindPopup('<b>' + g.name + '</b>').addTo(dotLayer);
-  });
+  async function searchPlacesNearby(lat, lon, radius) {
+    var url = 'https://places.googleapis.com/v1/places:searchNearby';
+    var body = {
+      includedTypes: ['gym', 'fitness_center', 'sports_complex'],
+      maxResultCount: 20,
+      locationRestriction: {
+        circle: { center: { latitude: lat, longitude: lon }, radius: radius }
+      }
+    };
+    var r = await fetchWithTimeout(url, {
+      method: 'POST',
+      mode: 'cors',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': GOOGLE_API_KEY,
+        'X-Goog-FieldMask': 'places.displayName,places.location,places.types'
+      },
+      body: JSON.stringify(body)
+    }, 10000);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var d = await r.json();
+    return d.places || [];
+  }
+
+  // Verwerk gemeenten in batches van 10 tegelijk
+  var batchSize = 10;
+  for (var bi = 0; bi < gemeentenToSearch.length; bi += batchSize) {
+    var batch = gemeentenToSearch.slice(bi, bi + batchSize);
+    var pct = Math.round(50 + (bi / gemeentenToSearch.length) * 40);
+    setP(pct, 'Gyms ophalen... gemeente ' + bi + '/' + gemeentenToSearch.length);
+
+    var promises = batch.map(function(gem) {
+      var radius = gem.pop > 100000 ? 8000 : gem.pop > 50000 ? 6000 : 4000;
+      return searchPlacesNearby(gem.lat, gem.lon, radius).catch(function(e) {
+        dbg('err', 'Places FOUT ' + gem.name + ': ' + e.message);
+        return [];
+      });
+    });
+
+    var results = await Promise.all(promises);
+    results.forEach(function(places) {
+      places.forEach(function(p) {
+        if (!p.location) return;
+        var lat = p.location.latitude;
+        var lon = p.location.longitude;
+        var key = Math.round(lat*10000) + '_' + Math.round(lon*10000);
+        if (seen[key]) return;
+        seen[key] = true;
+        var name = (p.displayName && p.displayName.text) || 'Sportschool';
+        gyms.push({ lat: lat, lon: lon, name: name });
+        totalFound++;
+        L.circleMarker([lat, lon], { radius: 4, fillColor: '#2d7a3a', color: '#fff', weight: 1.5, fillOpacity: .9 })
+          .bindPopup('<b>' + name + '</b>').addTo(dotLayer);
+      });
+    });
+
+    document.getElementById('s-gyms').textContent = totalFound;
+    // Kleine pauze om rate limits te voorkomen
+    await new Promise(function(res) { setTimeout(res, 100); });
+  }
+
+  dbg('ok', 'Google Places klaar: ' + gyms.length + ' unieke locaties');
+  document.getElementById('s-gyms').textContent = gyms.length;
   if (gyms.length === 0) {
-    dbg('err', 'Geen gymdata geladen — scores op bevolking only');
+    dbg('err', 'Geen gymdata geladen via Google Places');
   }
 
   setP(82, 'Scores berekenen...');
@@ -1044,8 +1074,10 @@ function computeScores() {
   if (!geoData) return;
   var hasGymData = gyms.length > 0;
 
-  // Stap 1: bereken inwoners per gym voor alle gemeenten
-  var ratios = [];
+  // NL gemiddelde: ~1 gym per 6.000 inwoners (gebaseerd op ~2.800 gyms / 17.9M inwoners)
+  var NL_AVG_INW_PER_GYM = 6000;
+
+  // Stap 1: bereken ratio per gemeente
   geoData.features.forEach(function(f) {
     var code = ((f.properties.statcode||f.properties.GM_CODE||'')).trim();
     var name = f.properties.statnaam||f.properties.GM_NAAM||f.properties.name||'';
@@ -1054,35 +1086,29 @@ function computeScores() {
     var gc = hasGymData ? countIn(f,c) : 0;
     f.properties._code=code; f.properties._name=name;
     f.properties._pop=pop; f.properties._gc=gc;
-    // Ratio: inwoners per gym (hoog = kans, laag = verzadigd)
-    // Geen gym = gebruik populatie als proxy voor potentie
-    var ratio = 0;
-    if (pop >= 10000) {
-      ratio = gc === 0 ? pop : Math.round(pop / gc);
-    }
-    f.properties._ratio = ratio;
-    if (pop >= 10000) ratios.push(ratio);
-  });
 
-  // Stap 2: normaliseer naar 0-100 score op basis van verdeling
-  // Hoog ratio = hoge score (veel mensen per gym = kans)
-  ratios.sort(function(a,b){return a-b;});
-  var p10 = ratios[Math.floor(ratios.length*0.10)] || 1000;
-  var p90 = ratios[Math.floor(ratios.length*0.90)] || 50000;
+    var score = 0;
+    if (pop >= 10000) {
+      if (!hasGymData || gc === 0) {
+        // Geen gymdata: neutrale score op basis van bevolking
+        score = Math.min(70, Math.round((pop / 30000) * 50));
+      } else {
+        // Inwoners per gym tov NL gemiddelde
+        // Boven gemiddelde = kans, onder gemiddelde = verzadigd
+        var inwPerGym = pop / gc;
+        // Score: NL gemiddelde = 50, 3x gemiddelde = 95, helft gemiddelde = 10
+        score = Math.round(50 + ((inwPerGym - NL_AVG_INW_PER_GYM) / NL_AVG_INW_PER_GYM) * 35);
+        score = Math.max(5, Math.min(100, score));
+      }
+    }
+    f.properties._score = score;
+    f.properties._inwPerGym = gc > 0 ? Math.round(pop/gc) : 0;
+  });
 
   var opp=0, sat=0;
   geoData.features.forEach(function(f) {
-    var pop = f.properties._pop || 0;
-    var ratio = f.properties._ratio || 0;
-    var score = 0;
-    if (pop >= 10000 && ratio > 0) {
-      // Lineair schalen tussen p10 (score 5) en p90 (score 95)
-      score = Math.round(5 + ((ratio - p10) / (p90 - p10)) * 90);
-      score = Math.max(5, Math.min(100, score));
-    }
-    f.properties._score = score;
-    if (score > 70 && pop > 15000) opp++;
-    if (f.properties._gc > 8) sat++;
+    if (f.properties._score > 70 && f.properties._pop > 15000) opp++;
+    if (f.properties._gc > 8 && f.properties._score < 40) sat++;
   });
 
   document.getElementById('s-opp').textContent = opp;
