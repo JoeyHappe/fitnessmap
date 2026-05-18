@@ -949,13 +949,16 @@ async function startLoad() {
   const GOOGLE_API_KEY = 'AIzaSyDBhNnhYMA73oOQ-e5Xkr4J1SmLYmdOFIo';
 
   // Haal centroids op van alle gemeenten met >15k inwoners
+  // Gebruik CBS_POP direct (nog voor computeScores)
   var gemeentenToSearch = [];
   if (geoData) {
     geoData.features.forEach(function(f) {
-      var pop = f.properties._pop || 0;
+      var code = ((f.properties.statcode||f.properties.GM_CODE||'')).trim();
+      var name = f.properties.statnaam||f.properties.GM_NAAM||f.properties.name||'';
+      var pop = CBS_POP[code] || 0;
       if (pop >= 15000) {
         var c = getCentroid(f);
-        gemeentenToSearch.push({ name: f.properties._name, lat: c[0], lon: c[1], pop: pop });
+        gemeentenToSearch.push({ name: name, lat: c[0], lon: c[1], pop: pop });
       }
     });
   }
