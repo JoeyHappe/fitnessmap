@@ -1176,15 +1176,19 @@ function computeScores() {
   var ratioMap = {};
   geoData.features.forEach(function(f){
     var code=((f.properties.statcode||f.properties.GM_CODE||'')).trim();
-    var name=f.properties.statnaam||f.properties.GM_NAAM||'';
+    var name=f.properties.statnaam||f.properties.GM_NAAM||f.properties.name||'';
     var pop=CBS_POP[code]||0;
     var c=getCentroid(f);
     var gc=gyms.length>0?countIn(f,c):0;
+    // Fallback: als geen CBS data, schat bevolking op basis van gyms of gebruik minimum
+    if (!pop && gc>0) pop = gc * NL_AVG; // schatting op basis van gyms
+    if (!pop) pop = 12000; // minimum schatting voor onbekende kleine gemeente
     f.properties._code=code;f.properties._name=name;f.properties._pop=pop;f.properties._gc=gc;
+    f.properties._popEstimated = !CBS_POP[code]; // markeer geschatte waarden
     // Inwoners per gym — hoog = kans, laag = verzadigd
-    var ratio = (pop>=10000 && gc>0) ? pop/gc : (pop>=10000 && gc===0 ? pop*1.5 : 0);
+    var ratio = (pop>=8000 && gc>0) ? pop/gc : (pop>=8000 && gc===0 ? pop*1.5 : 0);
     f.properties._ratio = ratio;
-    if (pop>=10000) ratioMap[code] = ratio;
+    if (pop>=8000) ratioMap[code] = ratio;
   });
 
   // Stap 2: percentiel-score — eerlijk vergelijken binnen NL
@@ -1200,7 +1204,7 @@ function computeScores() {
   geoData.features.forEach(function(f){
     var pop=f.properties._pop||0;
     var ratio=f.properties._ratio||0;
-    var score = pop>=10000 ? percentileScore(ratio) : 0;
+    var score = pop>=8000 ? percentileScore(ratio) : 0;
     f.properties._score=score;
     if(score>70&&pop>15000) opp++;
     if(f.properties._gc>8&&score<40) sat++;
@@ -1241,7 +1245,7 @@ function renderMap(){
         layer.bindPopup('<div style="font-size:13px;line-height:1.8;min-width:190px;">'+
           '<strong style="font-size:14px;">'+p._name+'</strong><br>'+ind+
           '<hr style="margin:5px 0;border-color:#ddd;">'+
-          'Inwoners: <b>'+(p._pop||0).toLocaleString('nl-NL')+'</b><br>'+
+          'Inwoners: <b>'+(p._pop||0).toLocaleString('nl-NL')+(p._popEstimated?' <span style="font-size:10px;color:#888;">(schatting)</span>':'')+'</b><br>'+
           'Sportscholen: <b>'+p._gc+'</b><br>'+
           'Score: <b>'+s+'/100</b><br>'+
           (p._gc>0?'Inw./gym: <b>'+Math.round((p._pop||0)/p._gc).toLocaleString('nl-NL')+'</b>':'<span style="color:#e07820">Geen gym gevonden</span>')+
@@ -1393,5 +1397,19 @@ function doExportList() {
 }
 
 </script>
+
+<div id="export-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:12px;padding:28px;width:360px;box-shadow:0 8px 40px rgba(0,0,0,.2);">
+    <h2 style="font-size:16px;font-weight:600;margin-bottom:6px;">Export opties</h2>
+    <p style="font-size:13px;color:#666;margin-bottom:20px;">Kies wat je wilt exporteren</p>
+    <button onclick="doPrintMap()" style="width:100%;padding:12px;background:#2d7a3a;color:white;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:10px;">
+      Kaart als PDF afdrukken
+    </button>
+    <button onclick="doExportList()" style="width:100%;padding:12px;background:#e8f5ea;color:#2d7a3a;border:1px solid #2d7a3a;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;margin-bottom:16px;">
+      Top 30 lijst als PDF
+    </button>
+    <button onclick="closeExport()" style="width:100%;padding:8px;background:none;border:none;color:#666;font-size:13px;cursor:pointer;">Annuleren</button>
+  </div>
+</div>
 </body>
 </html>
