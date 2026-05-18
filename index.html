@@ -726,9 +726,9 @@ header p { font-size: 11px; color: var(--muted); margin-top: 1px; }
 .top-name { font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
 .top-meta { font-size: 10px; color: var(--muted); margin-top: 2px; display: flex; gap: 10px; }
 .badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 20px; }
-.b-red { background: #fdecea; color: #b83232; }
+.b-red { background: #e8f5ea; color: #1a5c2a; }
 .b-org { background: #fef5e7; color: #b86a00; }
-.b-grn { background: var(--accent-light); color: var(--accent); }
+.b-grn { background: #fdecea; color: #b83232; }
 .b-gray { background: #f0f0f0; color: #888; }
 .map-wrap { flex: 1; position: relative; }
 #map { width: 100%; height: 100%; }
@@ -802,11 +802,11 @@ header p { font-size: 11px; color: var(--muted); margin-top: 1px; }
     <div class="section">
       <div class="section-title">Legenda</div>
       <div class="legend-wrap" id="legend">
-        <div class="legend-item"><div class="swatch" style="background:#b83232"></div>Hoge kans (&gt;75)</div>
-        <div class="legend-item"><div class="swatch" style="background:#e07820"></div>Goed (60–75)</div>
-        <div class="legend-item"><div class="swatch" style="background:#e8b420"></div>Gemiddeld (45–60)</div>
-        <div class="legend-item"><div class="swatch" style="background:#85c485"></div>Laag (25–45)</div>
-        <div class="legend-item"><div class="swatch" style="background:#2d7a3a"></div>Verzadigd (&lt;25)</div>
+        <div class="legend-item"><div class="swatch" style="background:#1a5c2a"></div>Hoge kans (&gt;75)</div>
+        <div class="legend-item"><div class="swatch" style="background:#2d8a3e"></div>Goed (60–75)</div>
+        <div class="legend-item"><div class="swatch" style="background:#6ab87a"></div>Gemiddeld (45–60)</div>
+        <div class="legend-item"><div class="swatch" style="background:#f5c842"></div>Laag (25–45)</div>
+        <div class="legend-item"><div class="swatch" style="background:#c0392b"></div>Verzadigd / vol (&lt;25)</div>
         <div class="legend-item"><div class="swatch" style="background:#d5d5d5"></div>Te kleine gemeente</div>
       </div>
     </div>
@@ -1029,41 +1029,60 @@ function countIn(f, c) {
 
 function computeScores() {
   if (!geoData) return;
-  var opp=0, sat=0;
   var hasGymData = gyms.length > 0;
+
+  // Stap 1: bereken inwoners per gym voor alle gemeenten
+  var ratios = [];
   geoData.features.forEach(function(f) {
     var code = ((f.properties.statcode||f.properties.GM_CODE||'')).trim();
     var name = f.properties.statnaam||f.properties.GM_NAAM||f.properties.name||'';
     var pop = CBS_POP[code]||0;
     var c = getCentroid(f);
-    var gc = hasGymData ? countIn(f,c) : -1;
-    var score = 0;
+    var gc = hasGymData ? countIn(f,c) : 0;
+    f.properties._code=code; f.properties._name=name;
+    f.properties._pop=pop; f.properties._gc=gc;
+    // Ratio: inwoners per gym (hoog = kans, laag = verzadigd)
+    // Geen gym = gebruik populatie als proxy voor potentie
+    var ratio = 0;
     if (pop >= 10000) {
-      if (!hasGymData) {
-        // Zonder gymdata: score puur op bevolkingsdichtheid relatief aan gemiddelde NL gemeente
-        score = Math.min(85, Math.round((pop / 50000) * 60));
-      } else if (gc === 0) {
-        score = Math.min(95, Math.round(pop / 900));
-      } else {
-        score = Math.min(100, Math.round((pop / (gc * 2500)) * 50));
-      }
+      ratio = gc === 0 ? pop : Math.round(pop / gc);
     }
-    f.properties._code=code; f.properties._name=name; f.properties._pop=pop;
-    f.properties._gc=gc<0?0:gc; f.properties._score=score; f.properties._hasGymData=hasGymData;
-    if (score>70&&pop>15000) opp++;
-    if (gc>8) sat++;
+    f.properties._ratio = ratio;
+    if (pop >= 10000) ratios.push(ratio);
   });
-  document.getElementById('s-opp').textContent = hasGymData ? opp : '–*';
-  document.getElementById('s-sat').textContent = hasGymData ? sat : '–*';
+
+  // Stap 2: normaliseer naar 0-100 score op basis van verdeling
+  // Hoog ratio = hoge score (veel mensen per gym = kans)
+  ratios.sort(function(a,b){return a-b;});
+  var p10 = ratios[Math.floor(ratios.length*0.10)] || 1000;
+  var p90 = ratios[Math.floor(ratios.length*0.90)] || 50000;
+
+  var opp=0, sat=0;
+  geoData.features.forEach(function(f) {
+    var pop = f.properties._pop || 0;
+    var ratio = f.properties._ratio || 0;
+    var score = 0;
+    if (pop >= 10000 && ratio > 0) {
+      // Lineair schalen tussen p10 (score 5) en p90 (score 95)
+      score = Math.round(5 + ((ratio - p10) / (p90 - p10)) * 90);
+      score = Math.max(5, Math.min(100, score));
+    }
+    f.properties._score = score;
+    if (score > 70 && pop > 15000) opp++;
+    if (f.properties._gc > 8) sat++;
+  });
+
+  document.getElementById('s-opp').textContent = opp;
+  document.getElementById('s-sat').textContent = sat;
 }
 
 function getColor(f) {
   var s=f.properties._score||0, p=f.properties._pop||0, g=f.properties._gc||0;
   if (mode==='opp') {
     if (!p||p<10000) return '#d5d5d5';
-    if (s>75) return '#b83232'; if (s>60) return '#e07820';
-    if (s>45) return '#e8b420'; if (s>25) return '#85c485';
-    return '#2d7a3a';
+    if (s>75) return '#1a5c2a'; if (s>60) return '#2d8a3e';
+    if (s>45) return '#6ab87a'; if (s>25) return '#f5c842';
+    return '#c0392b';
   }
   if (mode==='pop') {
     if (!p||p<5000) return '#f7fbff';
@@ -1109,7 +1128,7 @@ function setMode(m) {
   ['opp','pop','gym'].forEach(function(id) { document.getElementById('btn-'+id).classList.remove('active'); });
   document.getElementById('btn-'+m).classList.add('active');
   var legends = {
-    opp: '<div class="legend-item"><div class="swatch" style="background:#b83232"></div>Hoge kans (&gt;75)</div><div class="legend-item"><div class="swatch" style="background:#e07820"></div>Goed (60–75)</div><div class="legend-item"><div class="swatch" style="background:#e8b420"></div>Gemiddeld (45–60)</div><div class="legend-item"><div class="swatch" style="background:#85c485"></div>Laag (25–45)</div><div class="legend-item"><div class="swatch" style="background:#2d7a3a"></div>Verzadigd (&lt;25)</div><div class="legend-item"><div class="swatch" style="background:#d5d5d5"></div>Te kleine gemeente</div>',
+    opp: '<div class="legend-item"><div class="swatch" style="background:#1a5c2a"></div>Hoge kans (&gt;75)</div><div class="legend-item"><div class="swatch" style="background:#2d8a3e"></div>Goed (60–75)</div><div class="legend-item"><div class="swatch" style="background:#6ab87a"></div>Gemiddeld (45–60)</div><div class="legend-item"><div class="swatch" style="background:#f5c842"></div>Laag (25–45)</div><div class="legend-item"><div class="swatch" style="background:#c0392b"></div>Verzadigd / vol (&lt;25)</div><div class="legend-item"><div class="swatch" style="background:#d5d5d5"></div>Te kleine gemeente</div>',
     pop: '<div class="legend-item"><div class="swatch" style="background:#08519c"></div>&gt;300k inwoners</div><div class="legend-item"><div class="swatch" style="background:#4292c6"></div>75–150k</div><div class="legend-item"><div class="swatch" style="background:#deebf7"></div>15–40k</div><div class="legend-item"><div class="swatch" style="background:#f7fbff;border:1px solid #ddd"></div>&lt;15k</div>',
     gym: '<div class="legend-item"><div class="swatch" style="background:#005a20"></div>&gt;20 gyms</div><div class="legend-item"><div class="swatch" style="background:#6ab06a"></div>4–10 gyms</div><div class="legend-item"><div class="swatch" style="background:#e8f5ea;border:1px solid #ccc"></div>1–3 gyms</div><div class="legend-item"><div class="swatch" style="background:#fff5e6;border:1px solid #ddd"></div>Geen gym</div>'
   };
