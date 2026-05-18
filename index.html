@@ -947,55 +947,59 @@ async function startLoad() {
 
   setP(40, 'Stap 3/3: sportscholen ophalen via OpenStreetMap...');
   const bbox = '50.7,3.3,53.6,7.3';
-  // Alleen nodes (sneller), 2 parallelle endpoints als fallback
-  const q = '[out:json][timeout:55];(' +
-    'node["leisure"="fitness_centre"](' + bbox + ');' +
-    'node["leisure"="sports_centre"]["sport"~"fitness|gym|crossfit|bodybuilding"](' + bbox + ');' +
-    'node["amenity"="gym"](' + bbox + ');' +
-    'node["sport"="fitness"](' + bbox + ');' +
-    'way["leisure"="fitness_centre"](' + bbox + ');' +
-    'way["amenity"="gym"](' + bbox + ');' +
-    'way["leisure"="sports_centre"]["sport"~"fitness|gym|crossfit|bodybuilding"](' + bbox + ');' +
-    'way["sport"="fitness"](' + bbox + ');' +
-    ');out center 4000;';
+  const q1 = '[out:json][timeout:38];(node["leisure"="fitness_centre"](' + bbox + ');node["amenity"="gym"](' + bbox + '););out 3000;';
+  const q2 = '[out:json][timeout:38];(way["leisure"="fitness_centre"](' + bbox + ');way["amenity"="gym"](' + bbox + ');node["sport"="fitness"](' + bbox + '););out center 2000;';
   const overpassEndpoints = [
     'https://overpass-api.de/api/interpreter',
     'https://overpass.kumi.systems/api/interpreter',
     'https://overpass.openstreetmap.ru/api/interpreter',
   ];
-  dbg('info', 'Overpass starten, ' + overpassEndpoints.length + ' endpoints beschikbaar');
-  let gymLoaded = false;
-  for (let oi = 0; oi < overpassEndpoints.length && !gymLoaded; oi++) {
-    try {
-      setP(55 + oi*10, 'Sportscholen ophalen (poging ' + (oi+1) + ')...');
-      const r2 = await fetchWithTimeout(overpassEndpoints[oi], {
-        method: 'POST',
-        mode: 'cors',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: 'data=' + encodeURIComponent(q)
-      }, 45000);
-      dbg('ok', 'Overpass endpoint ' + oi + ' response: HTTP ' + r2.status);
-      if (!r2.ok) throw new Error('HTTP ' + r2.status);
-      const d2 = await r2.json();
-      gyms = d2.elements.filter(function(e) { return e.lat || (e.center && e.center.lat); }).map(function(e) {
-        return { lat: e.lat || e.center.lat, lon: e.lon || e.center.lon, name: (e.tags && e.tags.name) || 'Sportschool' };
-      });
-      dbg('ok', 'Gyms geladen: ' + gyms.length + ' locaties');
-      document.getElementById('s-gyms').textContent = gyms.length;
-      gyms.forEach(function(g) {
-        L.circleMarker([g.lat, g.lon], { radius: 4, fillColor: '#2d7a3a', color: '#fff', weight: 1.5, fillOpacity: .9 })
-          .bindPopup('<b>' + g.name + '</b>').addTo(dotLayer);
-      });
-      gymLoaded = true;
-    } catch (e) {
-      dbg('err', 'Overpass ' + oi + ' FOUT: ' + e.message);
-      console.warn('Overpass endpoint ' + oi + ' mislukt:', e.message);
+
+  async function runQuery(q) {
+    for (var oi = 0; oi < overpassEndpoints.length; oi++) {
+      try {
+        var r = await fetchWithTimeout(overpassEndpoints[oi], {
+          method: 'POST', mode: 'cors',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'data=' + encodeURIComponent(q)
+        }, 40000);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        var d = await r.json();
+        dbg('ok', 'Overpass OK via endpoint ' + oi + ': ' + d.elements.length + ' elementen');
+        return d.elements;
+      } catch(e) {
+        dbg('err', 'Overpass endpoint ' + oi + ' FOUT: ' + e.message);
+      }
     }
+    return [];
   }
-  if (!gymLoaded) {
-    dbg('err', 'Alle Overpass endpoints mislukt');
-    document.getElementById('s-gyms').textContent = 'n.v.t.';
-    document.getElementById('err-msg').innerHTML = '<div style="font-size:11px;color:#666;margin-top:8px;padding:6px 10px;background:#f5f5f5;border-radius:6px;">⚠️ Sportscholen niet beschikbaar (Overpass API onbereikbaar). Scores gebaseerd op bevolkingsdichtheid. Open in Chrome voor volledige analyse.</div>';
+
+  setP(50, 'Stap 3/3: sportscholen ophalen (deel 1/2)...');
+  var els1 = await runQuery(q1);
+  setP(68, 'Sportscholen ophalen (deel 2/2)...');
+  var els2 = await runQuery(q2);
+
+  var seen = {};
+  gyms = els1.concat(els2).filter(function(e) {
+    var lat = e.lat || (e.center && e.center.lat);
+    var lon = e.lon || (e.center && e.center.lon);
+    if (!lat) return false;
+    var key = Math.round(lat*10000) + '_' + Math.round(lon*10000);
+    if (seen[key]) return false;
+    seen[key] = true;
+    return true;
+  }).map(function(e) {
+    return { lat: e.lat||(e.center&&e.center.lat), lon: e.lon||(e.center&&e.center.lon), name: (e.tags&&e.tags.name)||'Sportschool' };
+  });
+
+  dbg('ok', 'Gyms geladen: ' + gyms.length + ' unieke locaties');
+  document.getElementById('s-gyms').textContent = gyms.length > 0 ? gyms.length : 'n.v.t.';
+  gyms.forEach(function(g) {
+    L.circleMarker([g.lat, g.lon], { radius: 4, fillColor: '#2d7a3a', color: '#fff', weight: 1.5, fillOpacity: .9 })
+      .bindPopup('<b>' + g.name + '</b>').addTo(dotLayer);
+  });
+  if (gyms.length === 0) {
+    dbg('err', 'Geen gymdata geladen — scores op bevolking only');
   }
 
   setP(82, 'Scores berekenen...');
