@@ -1341,11 +1341,71 @@ function closeExport() {
 }
 
 function doPrintMap() {
-  // Temporarily show only map
   document.getElementById('export-modal').style.display = 'none';
-  document.getElementById('tab-kansen').style.display = 'none';
-  document.getElementById('tab-map').style.display = 'flex';
-  window.print();
+  
+  // Build print window with map screenshot via canvas
+  // Get all canvas tiles from Leaflet map
+  var mapEl = document.getElementById('map');
+  var w = window.open('', '_blank', 'width=1000,height=800');
+  
+  // Collect all tile images from the map
+  var tileImgs = mapEl.querySelectorAll('.leaflet-tile');
+  var svgLayers = mapEl.querySelectorAll('.leaflet-overlay-pane svg');
+  
+  // Use a canvas to composite the map
+  var canvas = document.createElement('canvas');
+  var rect = mapEl.getBoundingClientRect();
+  canvas.width = rect.width;
+  canvas.height = rect.height;
+  var ctx = canvas.getContext('2d');
+  
+  // White background
+  ctx.fillStyle = '#f5f5f5';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  var pending = tileImgs.length;
+  if (pending === 0) { openMapPrint(canvas, w); return; }
+  
+  tileImgs.forEach(function(img) {
+    var tmpImg = new Image();
+    tmpImg.crossOrigin = 'anonymous';
+    tmpImg.onload = function() {
+      var style = window.getComputedStyle(img);
+      var transform = style.transform;
+      // Get tile position
+      var left = parseFloat(img.style.left) || 0;
+      var top = parseFloat(img.style.top) || 0;
+      // Get parent pane offset
+      var pane = img.closest('.leaflet-tile-pane');
+      if (pane) {
+        var paneRect = pane.getBoundingClientRect();
+        var mapRect = mapEl.getBoundingClientRect();
+        left += paneRect.left - mapRect.left;
+        top += paneRect.top - mapRect.top;
+      }
+      try { ctx.drawImage(tmpImg, left, top, img.width, img.height); } catch(e){}
+      pending--;
+      if (pending === 0) openMapPrint(canvas, w);
+    };
+    tmpImg.onerror = function() { pending--; if (pending===0) openMapPrint(canvas,w); };
+    tmpImg.src = img.src;
+  });
+}
+
+function openMapPrint(canvas, w) {
+  var dataUrl = canvas.toDataURL('image/png');
+  w.document.write('<!DOCTYPE html><html><head><title>Gym White Space Analyzer — Kaart</title>'
+    +'<style>body{margin:0;padding:20px;font-family:Arial,sans-serif;}'
+    +'h2{font-size:18px;color:#2d7a3a;margin-bottom:4px;}'
+    +'p{font-size:12px;color:#666;margin-bottom:12px;}'
+    +'img{max-width:100%;border:1px solid #ddd;border-radius:8px;}'
+    +'@media print{button{display:none}}</style></head><body>'
+    +'<h2>Gym White Space Analyzer — Nederland</h2>'
+    +'<p>Opportunity score per gemeente | '+new Date().toLocaleDateString("nl-NL")+'</p>'
+    +'<button onclick="window.print()" style="margin-bottom:12px;padding:8px 16px;background:#2d7a3a;color:white;border:none;border-radius:6px;cursor:pointer;">Afdrukken / PDF</button>'
+    +'<br><img src="'+dataUrl+'">'
+    +'</body></html>');
+  w.document.close();
 }
 
 function doExportList() {
