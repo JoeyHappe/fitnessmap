@@ -1045,10 +1045,14 @@ async function startLoad() {
     setP(40 + Math.round((bi/gemeenten.length)*50), 'Gyms ophalen '+bi+'/'+gemeenten.length+'...');
     var promises = batch.map(function(gem) {
       var radius = gem.pop>100000?8000:gem.pop>50000?6000:4000;
-      return fetchWithTimeout('https://places.googleapis.com/v1/places:searchNearby', {
+      return fetchWithTimeout('https://places.googleapis.com/v1/places:searchText', {
         method:'POST', mode:'cors',
-        headers:{'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_API_KEY,'X-Goog-FieldMask':'places.displayName,places.location'},
-        body: JSON.stringify({ includedTypes:['gym','fitness_center','sports_complex'], maxResultCount:20, locationRestriction:{ circle:{ center:{latitude:gem.lat,longitude:gem.lon}, radius:radius } } })
+        headers:{'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_API_KEY,'X-Goog-FieldMask':'places.displayName,places.location,places.types'},
+        body: JSON.stringify({
+          textQuery: 'sportschool fitness gym',
+          maxResultCount: 20,
+          locationBias: { circle: { center: {latitude:gem.lat, longitude:gem.lon}, radius:radius } }
+        })
       }, 10000).then(function(r){ return r.ok?r.json().then(function(d){return d.places||[];}):Promise.resolve([]); }).catch(function(){ return []; });
     });
     var results = await Promise.all(promises);
