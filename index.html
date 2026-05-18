@@ -823,6 +823,19 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-sy
 .opp-meta { font-size: 11px; color: var(--muted); line-height: 1.6; }
 .opp-score { font-size: 28px; font-weight: 700; color: var(--accent); line-height: 1; text-align: right; }
 .opp-sub { font-size: 10px; color: var(--muted); text-align: right; }
+
+  @media print {
+    #sidebar, #tab-bar, #btn-export, #header-badge { display: none !important; }
+    #app { height: auto !important; }
+    #body { flex-direction: column !important; height: auto !important; }
+    #right { width: 100% !important; }
+    #tab-map { display: flex !important; height: 500px !important; }
+    #tab-kansen { display: block !important; }
+    .print-only { display: block !important; }
+    .no-print { display: none !important; }
+    body { overflow: visible !important; height: auto !important; }
+  }
+  .print-only { display: none; }
 </style>
 </head>
 <body>
@@ -835,7 +848,10 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-sy
       </div>
       <div><h1>Gym White Space Analyzer</h1><p>Nederland — opportunity analyse per gemeente</p></div>
     </div>
+    <div style="display:flex;gap:8px;align-items:center;">
     <span id="header-badge">Data: Google Places + CBS 2025</span>
+    <button onclick="exportPDF()" id="btn-export" style="font-size:11px;padding:5px 12px;border-radius:20px;border:1px solid var(--border);background:var(--surface);color:var(--accent);cursor:pointer;font-weight:500;">⬇ Export PDF</button>
+  </div>
   </div>
 
   <div id="body">
@@ -1207,9 +1223,9 @@ function getColor(f){
     if(p>15000) return '#deebf7'; return '#f7fbff';
   }
   if(mode==='gym'){
-    if(g>20) return '#005a20'; if(g>10) return '#2d7a3a';
-    if(g>4) return '#6ab06a'; if(g>1) return '#b8ddb8';
-    if(g>0) return '#e8f5ea'; return '#fff5e6';
+    if(g>20) return '#b84c00'; if(g>10) return '#e06820';
+    if(g>4) return '#f5a050'; if(g>1) return '#fad4a8';
+    if(g>0) return '#fef0e0'; return '#f5f5f5';
   }
 }
 
@@ -1244,7 +1260,7 @@ function setMode(m){
   var legends={
     opp:'<div class="legend-item"><div class="swatch" style="background:#1a5c2a"></div>Hoge kans (&gt;75)</div><div class="legend-item"><div class="swatch" style="background:#2d8a3e"></div>Goed (60–75)</div><div class="legend-item"><div class="swatch" style="background:#6ab87a"></div>Gemiddeld (45–60)</div><div class="legend-item"><div class="swatch" style="background:#f5c842"></div>Laag (25–45)</div><div class="legend-item"><div class="swatch" style="background:#c0392b"></div>Verzadigd (&lt;25)</div><div class="legend-item"><div class="swatch" style="background:#d5d5d5"></div>Te kleine gemeente</div>',
     pop:'<div class="legend-item"><div class="swatch" style="background:#08519c"></div>&gt;300k inw.</div><div class="legend-item"><div class="swatch" style="background:#4292c6"></div>75–150k</div><div class="legend-item"><div class="swatch" style="background:#deebf7"></div>15–40k</div>',
-    gym:'<div class="legend-item"><div class="swatch" style="background:#005a20"></div>&gt;20 gyms</div><div class="legend-item"><div class="swatch" style="background:#6ab06a"></div>4–10 gyms</div><div class="legend-item"><div class="swatch" style="background:#e8f5ea"></div>1–3 gyms</div><div class="legend-item"><div class="swatch" style="background:#fff5e6;border:1px solid #ddd"></div>Geen gym</div>'
+    gym:'<div class="legend-item"><div class="swatch" style="background:#b84c00"></div>&gt;20 gyms (verzadigd)</div><div class="legend-item"><div class="swatch" style="background:#e06820"></div>11–20 gyms</div><div class="legend-item"><div class="swatch" style="background:#f5a050"></div>4–10 gyms</div><div class="legend-item"><div class="swatch" style="background:#fad4a8"></div>1–3 gyms</div><div class="legend-item"><div class="swatch" style="background:#f5f5f5;border:1px solid #ddd"></div>Geen gym</div>'
   };
   document.getElementById('legend').innerHTML=legends[m]||legends.opp;
   if(geoData) renderMap();
@@ -1309,6 +1325,73 @@ function toggleNames(el){
     else layer.unbindTooltip();
   });
 }
+
+function exportPDF() {
+  // Show export modal
+  var modal = document.getElementById('export-modal');
+  modal.style.display = 'flex';
+}
+
+function closeExport() {
+  document.getElementById('export-modal').style.display = 'none';
+}
+
+function doPrintMap() {
+  // Temporarily show only map
+  document.getElementById('export-modal').style.display = 'none';
+  document.getElementById('tab-kansen').style.display = 'none';
+  document.getElementById('tab-map').style.display = 'flex';
+  window.print();
+}
+
+function doExportList() {
+  // Generate printable top 30 list
+  if (!geoData) { alert('Laad eerst de data.'); return; }
+  document.getElementById('export-modal').style.display = 'none';
+  
+  var sorted = geoData.features
+    .filter(function(f){ return (f.properties._pop||0)>8000 && (f.properties._score||0)>=50; })
+    .sort(function(a,b){ return b.properties._score-a.properties._score; })
+    .slice(0,30);
+
+  var rows = sorted.map(function(f,i){
+    var p = f.properties;
+    var iwg = p._gc>0 ? Math.round((p._pop||0)/p._gc).toLocaleString('nl-NL') : '–';
+    var names = (p._gymNames||[]).slice(0,8).join(', ') || '–';
+    return '<tr style="border-bottom:1px solid #eee;">'
+      +'<td style="padding:8px 10px;font-weight:600;">'+(i+1)+'</td>'
+      +'<td style="padding:8px 10px;font-weight:600;">'+p._name+'</td>'
+      +'<td style="padding:8px 10px;">'+(p._pop||0).toLocaleString('nl-NL')+'</td>'
+      +'<td style="padding:8px 10px;">'+p._gc+'</td>'
+      +'<td style="padding:8px 10px;">'+iwg+'</td>'
+      +'<td style="padding:8px 10px;font-weight:700;color:#2d7a3a;">'+p._score+'</td>'
+      +'<td style="padding:8px 4px;font-size:11px;color:#666;">'+names+'</td>'
+      +'</tr>';
+  }).join('');
+
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    +'<title>Fit+ White Space Analyse — Top 30 Kansen</title>'
+    +'<style>body{font-family:Arial,sans-serif;margin:40px;color:#1a1a1a;}'
+    +'h1{font-size:22px;color:#2d7a3a;margin-bottom:4px;}'
+    +'p{font-size:12px;color:#666;margin-bottom:24px;}'
+    +'table{width:100%;border-collapse:collapse;font-size:13px;}'
+    +'th{background:#2d7a3a;color:white;padding:10px;text-align:left;}'
+    +'tr:nth-child(even){background:#f9f9f9;}'
+    +'@media print{button{display:none}}'
+    +'</style></head><body>'
+    +'<h1>Fit+ Gym White Space Analyse</h1>'
+    +'<p>Top 30 kansen per gemeente — gesorteerd op opportunity score | Gegenereerd: '+new Date().toLocaleDateString('nl-NL')+'</p>'
+    +'<button onclick="window.print()" style="margin-bottom:16px;padding:8px 16px;background:#2d7a3a;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;">Afdrukken / Opslaan als PDF</button>'
+    +'<table><thead><tr>'
+    +'<th>#</th><th>Gemeente</th><th>Inwoners</th><th>Gyms</th><th>Inw/gym</th><th>Score</th><th>Bestaande sportscholen</th>'
+    +'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'</body></html>';
+
+  var w = window.open('','_blank');
+  w.document.write(html);
+  w.document.close();
+}
+
 </script>
 </body>
 </html>
