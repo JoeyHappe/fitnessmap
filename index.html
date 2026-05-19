@@ -838,6 +838,51 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-sy
     @page { margin: 0; size: A4 landscape; }
   }
   .print-only { display: none; }
+
+  #map-screenshot-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 8000;
+    background: white;
+    flex-direction: column;
+  }
+  #map-screenshot-header {
+    padding: 12px 20px;
+    background: #2d7a3a;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  #map-fullscreen-container {
+    flex: 1;
+    position: relative;
+  }
+  #map-fullscreen-container #map {
+    position: absolute;
+    inset: 0;
+  }
+  @media print {
+    #map-screenshot-overlay { display: flex !important; }
+    #app { display: none !important; }
+    #map-screenshot-header button { display: none !important; }
+  }
+
+  #map-screenshot-overlay { display:none; position:fixed; inset:0; z-index:8000; background:white; flex-direction:column; }
+  #map-fs-header { padding:12px 20px; background:#2d7a3a; color:white; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+  #map-fs-body { flex:1; position:relative; }
+  @media print { #app { display:none !important; } #map-screenshot-overlay { display:flex !important; } #map-fs-header button { display:none; } }
+
+  .search-result-item { padding: 8px 14px; cursor: pointer; font-size: 13px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  .search-result-item:hover { background: var(--accent-light); }
+  .search-result-item:last-child { border-bottom: none; }
+  .search-badge { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 10px; }
+  .sb-green { background: var(--accent-light); color: var(--accent); }
+  .sb-red { background: #fdecea; color: #b83232; }
+  .sb-gray { background: #f0f0f0; color: #888; }
+  #search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(45,122,58,.15); }
 </style>
 </head>
 <body>
@@ -924,6 +969,16 @@ html, body { width: 100%; height: 100%; overflow: hidden; font-family: -apple-sy
       <div id="tab-bar">
         <button class="tab active" id="t-map" onclick="showTab('map')">Kaart</button>
         <button class="tab" id="t-kansen" onclick="showTab('kansen')">Top kansen</button>
+        <div style="flex:1;display:flex;align-items:center;padding:0 12px;gap:8px;">
+          <div style="position:relative;max-width:280px;width:100%;">
+            <input id="search-input" type="text" placeholder="Zoek gemeente..." 
+              oninput="onSearchInput(this.value)"
+              onkeydown="if(event.key==='Escape'){clearSearch();}"
+              style="width:100%;padding:5px 30px 5px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);outline:none;">
+            <span onclick="clearSearch()" style="position:absolute;right:8px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:14px;line-height:1;">✕</span>
+          </div>
+          <div id="search-results" style="display:none;position:absolute;top:41px;left:0;right:0;background:white;border:1px solid var(--border);border-radius:0 0 8px 8px;z-index:1000;max-height:280px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.1);"></div>
+        </div>
       </div>
       <div id="tab-map">
         <div id="map"></div>
@@ -1141,6 +1196,7 @@ async function startLoad() {
   buildTopList();
   setP(100,'Klaar');
   MAP.invalidateSize();
+  buildSearchIndex();
   loaded = true;
 }
 
@@ -1344,19 +1400,25 @@ function closeExport() {
 
 function doPrintMap() {
   document.getElementById('export-modal').style.display = 'none';
-  // Switch to map tab first
-  showTab('map');
-  setTimeout(function() {
-    MAP.invalidateSize();
-    // Add print class to body, then trigger print
-    document.body.classList.add('printing-map');
-    window.print();
-    // Remove after print dialog closes
-    setTimeout(function() {
-      document.body.classList.remove('printing-map');
-    }, 1000);
-  }, 300);
+  enterMapFullscreen();
 }
+
+function enterMapFullscreen() {
+  var overlay = document.getElementById('map-screenshot-overlay');
+  var container = document.getElementById('map-fs-body');
+  var mapEl = document.getElementById('map');
+  container.appendChild(mapEl);
+  overlay.style.display = 'flex';
+  setTimeout(function(){ MAP.invalidateSize(); }, 150);
+}
+
+function exitMapFullscreen() {
+  var mapWrap = document.getElementById('tab-map');
+  var mapEl = document.getElementById('map');
+  mapWrap.appendChild(mapEl);
+  document.getElementById('map-screenshot-overlay').style.display = 'none';
+  setTimeout(function(){ MAP.invalidateSize(); }, 150);
+
 
 function doExportList() {
   // Generate printable top 30 list
@@ -1406,6 +1468,7 @@ function doExportList() {
   w.document.close();
 }
 
+}
 </script>
 
 <div id="export-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;align-items:center;justify-content:center;">
@@ -1420,6 +1483,38 @@ function doExportList() {
     </button>
     <button onclick="closeExport()" style="width:100%;padding:8px;background:none;border:none;color:#666;font-size:13px;cursor:pointer;">Annuleren</button>
   </div>
+</div>
+
+<div id="map-screenshot-overlay">
+  <div id="map-screenshot-header">
+    <div>
+      <div style="font-size:16px;font-weight:600;">Gym White Space Analyzer — Nederland</div>
+      <div style="font-size:12px;opacity:.8;">Opportunity score per gemeente</div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button onclick="window.print()" style="padding:8px 16px;background:white;color:#2d7a3a;border:none;border-radius:6px;font-weight:600;cursor:pointer;font-size:13px;">
+        Afdrukken / PDF
+      </button>
+      <button onclick="exitMapFullscreen()" style="padding:8px 16px;background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.4);border-radius:6px;cursor:pointer;font-size:13px;">
+        ✕ Sluiten
+      </button>
+    </div>
+  </div>
+  <div id="map-fullscreen-container"></div>
+</div>
+
+<div id="map-screenshot-overlay">
+  <div id="map-fs-header">
+    <div>
+      <div style="font-size:16px;font-weight:600;">Gym White Space Analyzer — Nederland</div>
+      <div style="font-size:11px;opacity:.8;">Opportunity score per gemeente | Gegenereerd op 19-05-2026</div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="window.print()" style="padding:8px 16px;background:white;color:#2d7a3a;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Afdrukken / PDF</button>
+      <button onclick="exitMapFullscreen()" style="padding:8px 14px;background:rgba(255,255,255,.2);color:white;border:1px solid rgba(255,255,255,.4);border-radius:6px;cursor:pointer;">✕ Sluiten</button>
+    </div>
+  </div>
+  <div id="map-fs-body" id="map-fullscreen-container"></div>
 </div>
 </body>
 </html>
