@@ -965,7 +965,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
           <div id="gsr"></div>
         </div>
         <div id="place-search-wrap">
-          <input id="place-search-input" type="text" placeholder="Zoek plaatsnaam..." onkeydown="onPlaceSearchKey(event)">
+          <input id="place-search-input" type="text" placeholder="Zoek plaatsnaam..." oninput="onPlaceInput(this.value)" onkeydown="onPlaceSearchKey(event)">
           <span id="place-search-clear" onclick="closePlaceSearch()">✕</span>
           <div id="psr"></div>
         </div>
@@ -1084,7 +1084,7 @@ function fetchWithTimeout(url,opts,ms) {
 
 // ── LOAD DATA ─────────────────────────────────────────────────────────────
 function clearCache() {
-  try { localStorage.removeItem('gymdata_v8'); } catch(e){}
+  try { localStorage.removeItem('gymdata_v9'); } catch(e){}
   loaded = false;
   gyms = [];
   document.getElementById('btn-load').disabled = false;
@@ -1098,7 +1098,7 @@ async function startLoad() {
   document.getElementById('btn-load').disabled=true;
 
   // Check cache first
-  var cacheKey = 'gymdata_v8';
+  var cacheKey = 'gymdata_v9';
   var cached = null;
   try {
     var raw = localStorage.getItem(cacheKey);
@@ -1226,7 +1226,7 @@ async function startLoad() {
     var r1=await Promise.all(batch.map(function(gem){
       var radius=gem.pop>200000?12000:gem.pop>100000?10000:gem.pop>50000?8000:6000;
       return pSearch('https://places.googleapis.com/v1/places:searchNearby',{
-        includedTypes:['gym','fitness_center','sports_club','sports_complex','health','yoga_studio','martial_arts_school'],
+        includedTypes:['gym','fitness_center','sports_club','sports_complex','health','yoga_studio','martial_arts_school','pilates_studio','boxing_gym'],
         maxResultCount:20,
         locationRestriction:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:radius}}
       });
@@ -1243,7 +1243,7 @@ async function startLoad() {
     var r2=await Promise.all(batch2.map(function(gem){
       var radius=gem.pop>200000?12000:gem.pop>100000?10000:gem.pop>50000?8000:6000;
       return pSearch('https://places.googleapis.com/v1/places:searchText',{
-        textQuery:'sportschool fitness sportcentrum personal training',
+        textQuery:'sportschool fitness sportcentrum personal training sport studio',
         maxResultCount:20,
         locationBias:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:radius}}
       });
@@ -1290,7 +1290,7 @@ async function startLoad() {
   // Sla op in cache
   try {
     var cacheData = { ts: Date.now(), gyms: gyms.map(function(g){ return {lat:g.lat,lon:g.lon,name:g.name}; }) };
-    localStorage.setItem('gymdata_v8', JSON.stringify(cacheData));
+    localStorage.setItem('gymdata_v9', JSON.stringify(cacheData));
     dbg('info','Gyms opgeslagen in cache');
   } catch(e) { dbg('info','Cache opslaan mislukt: '+e.message); }
 
@@ -1734,21 +1734,24 @@ function closeGemPanel() {
 // ── PLAATSNAAM ZOEKEN ─────────────────────────────────────────────────────
 var placeSearchTimer = null;
 
+function onPlaceInput(val) {
+  clearTimeout(placeSearchTimer);
+  if (val.length >= 2) {
+    document.getElementById('psr').innerHTML = '<div class="sri" style="color:var(--muted);cursor:default;">Zoeken...</div>';
+    document.getElementById('psr').style.display = 'block';
+    placeSearchTimer = setTimeout(function(){ searchPlace(val); }, 350);
+  } else {
+    document.getElementById('psr').style.display = 'none';
+  }
+}
+
 function onPlaceSearchKey(e) {
-  var val = document.getElementById('place-search-input').value;
   if (e.key === 'Escape') { closePlaceSearch(); return; }
   if (e.key === 'Enter') {
     var first = document.querySelector('#psr .sri[data-lat]');
     if (first) { first.click(); return; }
-    searchPlace(val);
-    return;
-  }
-  // Live search with debounce
-  clearTimeout(placeSearchTimer);
-  if (val.length >= 2) {
-    placeSearchTimer = setTimeout(function(){ searchPlace(val); }, 400);
-  } else {
-    document.getElementById('psr').style.display = 'none';
+    var val = document.getElementById('place-search-input').value;
+    if (val.length >= 2) searchPlace(val);
   }
 }
 
@@ -1780,7 +1783,7 @@ async function searchPlace(val) {
       var lat = parseFloat(res.lat);
       var lon = parseFloat(res.lon);
       var addr = res.address || {};
-      var name = addr.village || addr.town || addr.city || addr.municipality || res.display_name.split(',')[0];
+      var name = addr.village || addr.hamlet || addr.suburb || addr.neighbourhood || addr.town || addr.city || addr.municipality || res.display_name.split(',')[0];
       var gemeente = addr.municipality || addr.county || '';
       var regio = [addr.state].filter(Boolean).join(', ');
 
