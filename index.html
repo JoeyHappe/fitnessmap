@@ -1045,7 +1045,7 @@ function fetchWithTimeout(url,opts,ms) {
 
 // ── LOAD DATA ─────────────────────────────────────────────────────────────
 function clearCache() {
-  try { localStorage.removeItem('gymdata_v6'); } catch(e){}
+  try { localStorage.removeItem('gymdata_v7'); } catch(e){}
   loaded = false;
   gyms = [];
   document.getElementById('btn-load').disabled = false;
@@ -1059,7 +1059,7 @@ async function startLoad() {
   document.getElementById('btn-load').disabled=true;
 
   // Check cache first
-  var cacheKey = 'gymdata_v6';
+  var cacheKey = 'gymdata_v7';
   var cached = null;
   try {
     var raw = localStorage.getItem(cacheKey);
@@ -1119,7 +1119,6 @@ async function startLoad() {
   setP(40,'Stap 3/3: sportscholen ophalen...');
 
   if (cached) {
-    // Herstel gyms uit cache
     gyms = cached.gyms;
     gyms.forEach(function(g){
       L.circleMarker([g.lat,g.lon],{radius:4,fillColor:'#2d7a3a',color:'#fff',weight:1.5,fillOpacity:.9}).bindPopup('<b>'+g.name+'</b>').addTo(dotLayer);
@@ -1127,7 +1126,6 @@ async function startLoad() {
     document.getElementById('s-gyms').textContent = gyms.length;
     dbg('ok','Gyms uit cache: '+gyms.length);
     setP(88,'Scores berekenen...');
-    // skip to compute
     if (geoData&&gyms.length>0){
       geoData.features.forEach(function(f){
         var c=getCentroid(f);
@@ -1158,70 +1156,102 @@ async function startLoad() {
   dbg('info','Google Places: '+gemeenten.length+' gemeenten doorzoeken...');
 
   var seen={};
-  var batchSize=10;
-  for (var bi=0;bi<gemeenten.length;bi+=batchSize){
-    var batch=gemeenten.slice(bi,bi+batchSize);
-    setP(40+Math.round((bi/gemeenten.length)*45),'Gyms '+bi+'/'+gemeenten.length+'...');
-    var promises=batch.map(function(gem){
-      // Gebruik grotere radius om rand-van-gemeente gyms niet te missen
-      var radius=gem.pop>200000?12000:gem.pop>100000?10000:gem.pop>50000?8000:6000;
-      var headers={'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_API_KEY,'X-Goog-FieldMask':'places.displayName,places.location'};
-      var loc={latitude:gem.lat,longitude:gem.lon};
-      // Zoekopdracht 1: op type
-      var p1=fetchWithTimeout('https://places.googleapis.com/v1/places:searchNearby',{
-        method:'POST',mode:'cors',headers:headers,
-        body:JSON.stringify({includedTypes:['gym','fitness_center','sports_club','sports_complex','health','yoga_studio','martial_arts_school'],maxResultCount:20,locationRestriction:{circle:{center:loc,radius:radius}}})
-      },12000).then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];}).catch(function(){return [];});
-      // Zoekopdracht 2: NL termen
-      var p2=fetchWithTimeout('https://places.googleapis.com/v1/places:searchText',{
-        method:'POST',mode:'cors',headers:headers,
-        body:JSON.stringify({textQuery:'sportschool fitness sportcentrum personal training',maxResultCount:20,locationBias:{circle:{center:loc,radius:radius}}})
-      },12000).then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];}).catch(function(){return [];});
-      // Zoekopdrachten 3+4+5: ketens apart gezocht voor betere coverage
-      // Aparte query per keten vangt naamvariaties (Basic-Fit / Basic Fit / BasicFit)
-      function textSearch(q) {
-        return fetchWithTimeout('https://places.googleapis.com/v1/places:searchText',{
-          method:'POST',mode:'cors',headers:headers,
-          body:JSON.stringify({textQuery:q,maxResultCount:20,locationBias:{circle:{center:loc,radius:radius}}})
-        },12000).then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];}).catch(function(){return [];});
-      }
-      var chains = [
-        'Basic Fit',      // vangt Basic-Fit, Basic Fit, BasicFit
-        'GO Health',      // vangt GO Health Clubs, Go Health, GoHealth
-        'fit+',           // vangt fit+, fit plus, Fit+, fit + Assen etc
-        'Anytime Fitness',
-        'Sportcity',
-        'HealthCity',
-        'FitForFree',
-        'OneFit'
-      ];
-      var chainPromises = chains.map(function(chain){ return textSearch(chain); });
-      return Promise.all([p1,p2].concat(chainPromises)).then(function(res){
-        return res.reduce(function(acc,r){ return acc.concat(r); }, []);
-      });
-    });
-    var results=await Promise.all(promises);
-    results.forEach(function(places){
-      places.forEach(function(p){
-        if (!p.location) return;
-        var lat=p.location.latitude,lon=p.location.longitude;
-        var key=Math.round(lat*10000)+'_'+Math.round(lon*10000);
-        if (seen[key]) return;
-        seen[key]=true;
-        var name=(p.displayName&&p.displayName.text)||'Sportschool';
-        gyms.push({lat:lat,lon:lon,name:name});
-        L.circleMarker([lat,lon],{radius:4,fillColor:'#2d7a3a',color:'#fff',weight:1.5,fillOpacity:.9}).bindPopup('<b>'+name+'</b>').addTo(dotLayer);
-      });
+  var headers={'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_API_KEY,'X-Goog-FieldMask':'places.displayName,places.location'};
+
+  function addPlaces(places) {
+    places.forEach(function(p){
+      if (!p.location) return;
+      var lat=p.location.latitude,lon=p.location.longitude;
+      var key=Math.round(lat*10000)+'_'+Math.round(lon*10000);
+      if (seen[key]) return;
+      seen[key]=true;
+      var name=(p.displayName&&p.displayName.text)||'Sportschool';
+      gyms.push({lat:lat,lon:lon,name:name});
+      L.circleMarker([lat,lon],{radius:4,fillColor:'#2d7a3a',color:'#fff',weight:1.5,fillOpacity:.9}).bindPopup('<b>'+name+'</b>').addTo(dotLayer);
     });
     document.getElementById('s-gyms').textContent=gyms.length;
-    await new Promise(function(res){setTimeout(res,80);});
   }
+
+  function pSearch(url, body) {
+    return fetchWithTimeout(url,{method:'POST',mode:'cors',headers:headers,body:JSON.stringify(body)},12000)
+      .then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];})
+      .catch(function(){return [];});
+  }
+
+  // FASE 1: Type-based nearby search per gemeente (1 call per gemeente)
+  setP(42,'Fase 1/3: type-gebaseerde zoekopdracht...');
+  var batchSize=8;
+  for (var bi=0;bi<gemeenten.length;bi+=batchSize){
+    var batch=gemeenten.slice(bi,bi+batchSize);
+    setP(42+Math.round((bi/gemeenten.length)*20),'Fase 1: gemeente '+(bi+1)+'/'+gemeenten.length+'...');
+    var r1=await Promise.all(batch.map(function(gem){
+      var radius=gem.pop>200000?12000:gem.pop>100000?10000:gem.pop>50000?8000:6000;
+      return pSearch('https://places.googleapis.com/v1/places:searchNearby',{
+        includedTypes:['gym','fitness_center','sports_club','sports_complex','health','yoga_studio','martial_arts_school'],
+        maxResultCount:20,
+        locationRestriction:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:radius}}
+      });
+    }));
+    r1.forEach(function(places){addPlaces(places);});
+    await new Promise(function(res){setTimeout(res,120);});
+  }
+
+  // FASE 2: Tekst-based search per gemeente (1 call per gemeente)
+  setP(62,'Fase 2/3: tekst-gebaseerde zoekopdracht...');
+  for (var bi2=0;bi2<gemeenten.length;bi2+=batchSize){
+    var batch2=gemeenten.slice(bi2,bi2+batchSize);
+    setP(62+Math.round((bi2/gemeenten.length)*18),'Fase 2: gemeente '+(bi2+1)+'/'+gemeenten.length+'...');
+    var r2=await Promise.all(batch2.map(function(gem){
+      var radius=gem.pop>200000?12000:gem.pop>100000?10000:gem.pop>50000?8000:6000;
+      return pSearch('https://places.googleapis.com/v1/places:searchText',{
+        textQuery:'sportschool fitness sportcentrum personal training',
+        maxResultCount:20,
+        locationBias:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:radius}}
+      });
+    }));
+    r2.forEach(function(places){addPlaces(places);});
+    await new Promise(function(res){setTimeout(res,120);});
+  }
+
+  // FASE 3: Ketenzoekacties voor heel NL via grote steden als ankers
+  setP(80,'Fase 3/3: ketenlocaties ophalen...');
+  var anchors=[
+    {lat:52.37,lon:4.89,r:50000},   // Amsterdam
+    {lat:51.92,lon:4.48,r:50000},   // Rotterdam
+    {lat:52.07,lon:4.30,r:50000},   // Den Haag
+    {lat:52.09,lon:5.12,r:40000},   // Utrecht
+    {lat:51.44,lon:5.47,r:40000},   // Eindhoven
+    {lat:53.21,lon:6.56,r:40000},   // Groningen
+    {lat:51.69,lon:5.30,r:40000},   // Den Bosch
+    {lat:51.97,lon:5.91,r:40000},   // Arnhem/Nijmegen
+    {lat:52.51,lon:6.09,r:40000},   // Zwolle
+    {lat:53.20,lon:5.80,r:40000},   // Leeuwarden/Friesland
+    {lat:52.15,lon:5.39,r:30000},   // Amersfoort
+    {lat:52.63,lon:4.75,r:30000},   // Alkmaar/Hoorn
+    {lat:51.56,lon:4.79,r:30000},   // Breda/Tilburg
+    {lat:52.22,lon:6.90,r:30000},   // Enschede/Twente
+    {lat:52.36,lon:6.66,r:30000},   // Deventer/Apeldoorn
+  ];
+  var chains=['Basic Fit','GO Health','fit+','Anytime Fitness','Sportcity','HealthCity','FitForFree','OneFit'];
+  for (var ci=0;ci<chains.length;ci++){
+    setP(80+Math.round((ci/chains.length)*10),'Fase 3: '+chains[ci]+'...');
+    var chainResults=await Promise.all(anchors.map(function(a){
+      return pSearch('https://places.googleapis.com/v1/places:searchText',{
+        textQuery:chains[ci],
+        maxResultCount:20,
+        locationBias:{circle:{center:{latitude:a.lat,longitude:a.lon},radius:a.r}}
+      });
+    }));
+    chainResults.forEach(function(places){addPlaces(places);});
+    await new Promise(function(res){setTimeout(res,200);});
+  }
+
   dbg('ok','Gyms klaar: '+gyms.length);
 
   // Sla op in cache
   try {
     var cacheData = { ts: Date.now(), gyms: gyms.map(function(g){ return {lat:g.lat,lon:g.lon,name:g.name}; }) };
-    localStorage.setItem('gymdata_v6', JSON.stringify(cacheData));
+    localStorage.setItem('gymdata_v7', JSON.stringify(cacheData));
     dbg('info','Gyms opgeslagen in cache');
   } catch(e) { dbg('info','Cache opslaan mislukt: '+e.message); }
 
