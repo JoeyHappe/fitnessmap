@@ -1045,7 +1045,7 @@ function fetchWithTimeout(url,opts,ms) {
 
 // ── LOAD DATA ─────────────────────────────────────────────────────────────
 function clearCache() {
-  try { localStorage.removeItem('gymdata_v5'); } catch(e){}
+  try { localStorage.removeItem('gymdata_v6'); } catch(e){}
   loaded = false;
   gyms = [];
   document.getElementById('btn-load').disabled = false;
@@ -1059,7 +1059,7 @@ async function startLoad() {
   document.getElementById('btn-load').disabled=true;
 
   // Check cache first
-  var cacheKey = 'gymdata_v5';
+  var cacheKey = 'gymdata_v6';
   var cached = null;
   try {
     var raw = localStorage.getItem(cacheKey);
@@ -1177,17 +1177,28 @@ async function startLoad() {
         method:'POST',mode:'cors',headers:headers,
         body:JSON.stringify({textQuery:'sportschool fitness sportcentrum personal training',maxResultCount:20,locationBias:{circle:{center:loc,radius:radius}}})
       },12000).then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];}).catch(function(){return [];});
-      // Zoekopdracht 3: bekende ketens
-      var p3=fetchWithTimeout('https://places.googleapis.com/v1/places:searchText',{
-        method:'POST',mode:'cors',headers:headers,
-        body:JSON.stringify({textQuery:'Basic-Fit Anytime Fitness Sportcity HealthCity FitForFree fit+ GO Health Clubs OneFit Vondelgym David Lloyd',maxResultCount:20,locationBias:{circle:{center:loc,radius:radius}}})
-      },12000).then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];}).catch(function(){return [];});
-      // Zoekopdracht 4: "fit" keyword - vangt fit+, fit20, FitForFree etc
-      var p4=fetchWithTimeout('https://places.googleapis.com/v1/places:searchText',{
-        method:'POST',mode:'cors',headers:headers,
-        body:JSON.stringify({textQuery:'fit club sport gym health wellness',maxResultCount:20,locationBias:{circle:{center:loc,radius:radius}}})
-      },12000).then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];}).catch(function(){return [];});
-      return Promise.all([p1,p2,p3,p4]).then(function(res){ return res[0].concat(res[1]).concat(res[2]).concat(res[3]); });
+      // Zoekopdrachten 3+4+5: ketens apart gezocht voor betere coverage
+      // Aparte query per keten vangt naamvariaties (Basic-Fit / Basic Fit / BasicFit)
+      function textSearch(q) {
+        return fetchWithTimeout('https://places.googleapis.com/v1/places:searchText',{
+          method:'POST',mode:'cors',headers:headers,
+          body:JSON.stringify({textQuery:q,maxResultCount:20,locationBias:{circle:{center:loc,radius:radius}}})
+        },12000).then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];}).catch(function(){return [];});
+      }
+      var chains = [
+        'Basic Fit',      // vangt Basic-Fit, Basic Fit, BasicFit
+        'GO Health',      // vangt GO Health Clubs, Go Health, GoHealth
+        'fit+',           // vangt fit+, fit plus, Fit+, fit + Assen etc
+        'Anytime Fitness',
+        'Sportcity',
+        'HealthCity',
+        'FitForFree',
+        'OneFit'
+      ];
+      var chainPromises = chains.map(function(chain){ return textSearch(chain); });
+      return Promise.all([p1,p2].concat(chainPromises)).then(function(res){
+        return res.reduce(function(acc,r){ return acc.concat(r); }, []);
+      });
     });
     var results=await Promise.all(promises);
     results.forEach(function(places){
@@ -1210,7 +1221,7 @@ async function startLoad() {
   // Sla op in cache
   try {
     var cacheData = { ts: Date.now(), gyms: gyms.map(function(g){ return {lat:g.lat,lon:g.lon,name:g.name}; }) };
-    localStorage.setItem('gymdata_v5', JSON.stringify(cacheData));
+    localStorage.setItem('gymdata_v6', JSON.stringify(cacheData));
     dbg('info','Gyms opgeslagen in cache');
   } catch(e) { dbg('info','Cache opslaan mislukt: '+e.message); }
 
