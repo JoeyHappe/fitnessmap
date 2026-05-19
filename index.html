@@ -868,6 +868,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
       <div class="sec">
         <div class="stitle">Data laden</div>
         <button class="btn-load" id="btn-load" onclick="startLoad()">Laad sportscholen &amp; kaart</button>
+        <button onclick="clearCache()" style="width:100%;padding:6px;border-radius:var(--r);border:1px solid var(--border);background:none;color:var(--muted);font-size:11px;cursor:pointer;margin-top:5px;">↺ Ververs gymdata (cache wissen)</button>
         <div class="prog-wrap" id="prog-wrap">
           <div class="prog-label" id="prog-label">Bezig...</div>
           <div class="prog-track"><div class="prog-bar" id="prog-bar"></div></div>
@@ -1033,9 +1034,38 @@ function fetchWithTimeout(url,opts,ms) {
 }
 
 // ── LOAD DATA ─────────────────────────────────────────────────────────────
+function clearCache() {
+  try { localStorage.removeItem('gymdata_v2'); } catch(e){}
+  loaded = false;
+  gyms = [];
+  document.getElementById('btn-load').disabled = false;
+  document.getElementById('s-gyms').textContent = '–';
+  if (dotLayer) dotLayer.clearLayers();
+  dbg('info','Cache gewist — klik laden om te vernieuwen');
+}
+
 async function startLoad() {
   if (loaded) return;
   document.getElementById('btn-load').disabled=true;
+
+  // Check cache first
+  var cacheKey = 'gymdata_v2';
+  var cached = null;
+  try {
+    var raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      cached = JSON.parse(raw);
+      var age = Date.now() - cached.ts;
+      if (age < 24*60*60*1000) { // 24 uur geldig
+        dbg('ok','Cache geladen: '+cached.gyms.length+' gyms ('+Math.round(age/60000)+' min oud)');
+        cached = cached;
+      } else {
+        dbg('info','Cache verlopen, opnieuw ophalen...');
+        cached = null;
+        localStorage.removeItem(cacheKey);
+      }
+    }
+  } catch(e) { cached = null; }
 
   // CBS live
   setP(5,'Stap 1/3: CBS data ophalen...');
@@ -1075,8 +1105,36 @@ async function startLoad() {
     return;
   }
 
-  // Google Places
+  // Google Places - gebruik cache als beschikbaar
   setP(40,'Stap 3/3: sportscholen ophalen...');
+
+  if (cached) {
+    // Herstel gyms uit cache
+    gyms = cached.gyms;
+    gyms.forEach(function(g){
+      L.circleMarker([g.lat,g.lon],{radius:4,fillColor:'#2d7a3a',color:'#fff',weight:1.5,fillOpacity:.9}).bindPopup('<b>'+g.name+'</b>').addTo(dotLayer);
+    });
+    document.getElementById('s-gyms').textContent = gyms.length;
+    dbg('ok','Gyms uit cache: '+gyms.length);
+    setP(88,'Scores berekenen...');
+    // skip to compute
+    if (geoData&&gyms.length>0){
+      geoData.features.forEach(function(f){
+        var c=getCentroid(f);
+        var names=[];
+        gyms.forEach(function(g){
+          if (Math.abs(g.lat-c[0])>.3||Math.abs(g.lon-c[1])>.4) return;
+          if (ptIn(g.lon,g.lat,f.geometry)) names.push(g.name);
+        });
+        f.properties._gymNames=names;
+      });
+    }
+    computeScores(); renderMap(); buildTopList(); buildSearchIndex();
+    setP(100,'Klaar (uit cache)');
+    MAP.invalidateSize(); loaded=true;
+    return;
+  }
+
   var gemeenten=[];
   geoData.features.forEach(function(f){
     var code=((f.properties.statcode||f.properties.GM_CODE||'')).trim();
@@ -1119,6 +1177,13 @@ async function startLoad() {
     await new Promise(function(res){setTimeout(res,80);});
   }
   dbg('ok','Gyms klaar: '+gyms.length);
+
+  // Sla op in cache
+  try {
+    var cacheData = { ts: Date.now(), gyms: gyms.map(function(g){ return {lat:g.lat,lon:g.lon,name:g.name}; }) };
+    localStorage.setItem('gymdata_v2', JSON.stringify(cacheData));
+    dbg('info','Gyms opgeslagen in cache');
+  } catch(e) { dbg('info','Cache opslaan mislukt: '+e.message); }
 
   // Koppel gymnamen per gemeente
   if (geoData&&gyms.length>0){
