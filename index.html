@@ -1084,7 +1084,7 @@ function fetchWithTimeout(url,opts,ms) {
 
 // ── LOAD DATA ─────────────────────────────────────────────────────────────
 function clearCache() {
-  try { localStorage.removeItem('gymdata_v9'); } catch(e){}
+  try { localStorage.removeItem('gymdata_v10'); } catch(e){}
   loaded = false;
   gyms = [];
   document.getElementById('btn-load').disabled = false;
@@ -1098,7 +1098,7 @@ async function startLoad() {
   document.getElementById('btn-load').disabled=true;
 
   // Check cache first
-  var cacheKey = 'gymdata_v9';
+  var cacheKey = 'gymdata_v10';
   var cached = null;
   try {
     var raw = localStorage.getItem(cacheKey);
@@ -1232,7 +1232,7 @@ async function startLoad() {
       });
     }));
     r1.forEach(function(places){addPlaces(places);});
-    await new Promise(function(res){setTimeout(res,120);});
+    await new Promise(function(res){setTimeout(res,150);});
   }
 
   // FASE 2: Tekst-based search per gemeente (1 call per gemeente)
@@ -1249,40 +1249,34 @@ async function startLoad() {
       });
     }));
     r2.forEach(function(places){addPlaces(places);});
-    await new Promise(function(res){setTimeout(res,120);});
+    await new Promise(function(res){setTimeout(res,150);});
   }
 
-  // FASE 3: Ketenzoekacties voor heel NL via grote steden als ankers
+  // FASE 3: Ketenzoekacties - 5 grote regio-ankers, batches van 3
   setP(80,'Fase 3/3: ketenlocaties ophalen...');
   var anchors=[
-    {lat:52.37,lon:4.89,r:50000},   // Amsterdam
-    {lat:51.92,lon:4.48,r:50000},   // Rotterdam
-    {lat:52.07,lon:4.30,r:50000},   // Den Haag
-    {lat:52.09,lon:5.12,r:40000},   // Utrecht
-    {lat:51.44,lon:5.47,r:40000},   // Eindhoven
-    {lat:53.21,lon:6.56,r:40000},   // Groningen
-    {lat:51.69,lon:5.30,r:40000},   // Den Bosch
-    {lat:51.97,lon:5.91,r:40000},   // Arnhem/Nijmegen
-    {lat:52.51,lon:6.09,r:40000},   // Zwolle
-    {lat:53.20,lon:5.80,r:40000},   // Leeuwarden/Friesland
-    {lat:52.15,lon:5.39,r:30000},   // Amersfoort
-    {lat:52.63,lon:4.75,r:30000},   // Alkmaar/Hoorn
-    {lat:51.56,lon:4.79,r:30000},   // Breda/Tilburg
-    {lat:52.22,lon:6.90,r:30000},   // Enschede/Twente
-    {lat:52.36,lon:6.66,r:30000},   // Deventer/Apeldoorn
+    {lat:52.20,lon:4.90,r:80000},   // Randstad Noord (Amsterdam/Utrecht)
+    {lat:51.90,lon:4.50,r:80000},   // Randstad Zuid (Rotterdam/Den Haag)
+    {lat:51.50,lon:5.30,r:80000},   // Brabant (Eindhoven/Tilburg/Breda)
+    {lat:52.50,lon:6.10,r:80000},   // Oost (Zwolle/Enschede/Apeldoorn)
+    {lat:53.10,lon:6.40,r:80000},   // Noord (Groningen/Friesland/Drenthe)
   ];
   var chains=['Basic Fit','GO Health','fit+','Anytime Fitness','Sportcity','HealthCity','FitForFree','OneFit'];
   for (var ci=0;ci<chains.length;ci++){
     setP(80+Math.round((ci/chains.length)*10),'Fase 3: '+chains[ci]+'...');
-    var chainResults=await Promise.all(anchors.map(function(a){
-      return pSearch('https://places.googleapis.com/v1/places:searchText',{
-        textQuery:chains[ci],
-        maxResultCount:20,
-        locationBias:{circle:{center:{latitude:a.lat,longitude:a.lon},radius:a.r}}
-      });
-    }));
-    chainResults.forEach(function(places){addPlaces(places);});
-    await new Promise(function(res){setTimeout(res,200);});
+    // Stuur ankers in batches van 2 om rate limiting te vermijden
+    for (var ai=0;ai<anchors.length;ai+=2){
+      var anchorBatch=anchors.slice(ai,ai+2);
+      var chainResults=await Promise.all(anchorBatch.map(function(a){
+        return pSearch('https://places.googleapis.com/v1/places:searchText',{
+          textQuery:chains[ci],
+          maxResultCount:20,
+          locationBias:{circle:{center:{latitude:a.lat,longitude:a.lon},radius:a.r}}
+        });
+      }));
+      chainResults.forEach(function(places){addPlaces(places);});
+      await new Promise(function(res){setTimeout(res,250);});
+    }
   }
 
   dbg('ok','Gyms klaar: '+gyms.length);
@@ -1290,7 +1284,7 @@ async function startLoad() {
   // Sla op in cache
   try {
     var cacheData = { ts: Date.now(), gyms: gyms.map(function(g){ return {lat:g.lat,lon:g.lon,name:g.name}; }) };
-    localStorage.setItem('gymdata_v9', JSON.stringify(cacheData));
+    localStorage.setItem('gymdata_v10', JSON.stringify(cacheData));
     dbg('info','Gyms opgeslagen in cache');
   } catch(e) { dbg('info','Cache opslaan mislukt: '+e.message); }
 
