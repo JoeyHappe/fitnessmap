@@ -1084,7 +1084,7 @@ function fetchWithTimeout(url,opts,ms) {
 
 // ── LOAD DATA ─────────────────────────────────────────────────────────────
 function clearCache() {
-  try { localStorage.removeItem('gymdata_v10'); } catch(e){}
+  try { localStorage.removeItem('gymdata_v11'); } catch(e){}
   loaded = false;
   gyms = [];
   document.getElementById('btn-load').disabled = false;
@@ -1098,7 +1098,7 @@ async function startLoad() {
   document.getElementById('btn-load').disabled=true;
 
   // Check cache first
-  var cacheKey = 'gymdata_v10';
+  var cacheKey = 'gymdata_v11';
   var cached = null;
   try {
     var raw = localStorage.getItem(cacheKey);
@@ -1226,7 +1226,7 @@ async function startLoad() {
     var r1=await Promise.all(batch.map(function(gem){
       var radius=gem.pop>200000?12000:gem.pop>100000?10000:gem.pop>50000?8000:6000;
       return pSearch('https://places.googleapis.com/v1/places:searchNearby',{
-        includedTypes:['gym','fitness_center','sports_club','sports_complex','health','yoga_studio','martial_arts_school','pilates_studio','boxing_gym'],
+        includedTypes:['gym','fitness_center','sports_club','sports_complex','health','yoga_studio','martial_arts_school'],
         maxResultCount:20,
         locationRestriction:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:radius}}
       });
@@ -1284,7 +1284,7 @@ async function startLoad() {
   // Sla op in cache
   try {
     var cacheData = { ts: Date.now(), gyms: gyms.map(function(g){ return {lat:g.lat,lon:g.lon,name:g.name}; }) };
-    localStorage.setItem('gymdata_v10', JSON.stringify(cacheData));
+    localStorage.setItem('gymdata_v11', JSON.stringify(cacheData));
     dbg('info','Gyms opgeslagen in cache');
   } catch(e) { dbg('info','Cache opslaan mislukt: '+e.message); }
 
