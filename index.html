@@ -807,10 +807,15 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 #search-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:13px;line-height:1;}
 #sr{display:none;position:absolute;top:34px;left:0;min-width:280px;background:#fff;border:1px solid var(--border);border-radius:8px;z-index:9999;max-height:280px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.12);}
 #gym-search-wrap{position:relative;margin-left:8px;}
-#gym-search-input{padding:5px 28px 5px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:#1a1a1a;outline:none;width:200px;}
+#gym-search-input{padding:5px 28px 5px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:#1a1a1a;outline:none;width:185px;}
 #gym-search-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(45,122,58,.12);}
 #gym-search-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:13px;line-height:1;}
 #gsr{display:none;position:absolute;top:34px;left:0;min-width:280px;background:#fff;border:1px solid var(--border);border-radius:8px;z-index:9999;max-height:280px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.12);}
+#place-search-wrap{position:relative;margin-left:8px;}
+#place-search-input{padding:5px 28px 5px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:#1a1a1a;outline:none;width:185px;}
+#place-search-input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(45,122,58,.12);}
+#place-search-clear{position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:13px;line-height:1;}
+#psr{display:none;position:absolute;top:34px;left:0;min-width:300px;background:#fff;border:1px solid var(--border);border-radius:8px;z-index:9999;max-height:280px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.12);}
 .sri{padding:9px 12px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;gap:8px;}
 .sri:hover{background:var(--al);}.sri:last-child{border-bottom:none;}
 .search-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;white-space:nowrap;}
@@ -958,6 +963,11 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
           <input id="gym-search-input" type="text" placeholder="Zoek sportschool..." oninput="onGymSearch(this.value)" onkeydown="onGymSearchKey(event)">
           <span id="gym-search-clear" onclick="closeGymSearch()">✕</span>
           <div id="gsr"></div>
+        </div>
+        <div id="place-search-wrap">
+          <input id="place-search-input" type="text" placeholder="Zoek plaatsnaam..." onkeydown="onPlaceSearchKey(event)">
+          <span id="place-search-clear" onclick="closePlaceSearch()">✕</span>
+          <div id="psr"></div>
         </div>
       </div>
       <div id="tab-map" style="position:relative;">
@@ -1720,6 +1730,125 @@ function closeGemPanel() {
   document.getElementById('gem-panel').style.display = 'none';
   setTimeout(function(){ MAP.invalidateSize(); }, 50);
 }
+
+// ── PLAATSNAAM ZOEKEN ─────────────────────────────────────────────────────
+var placeSearchTimer = null;
+
+function onPlaceSearchKey(e) {
+  var val = document.getElementById('place-search-input').value;
+  if (e.key === 'Escape') { closePlaceSearch(); return; }
+  if (e.key === 'Enter') {
+    var first = document.querySelector('#psr .sri[data-lat]');
+    if (first) { first.click(); return; }
+    searchPlace(val);
+    return;
+  }
+  // Live search with debounce
+  clearTimeout(placeSearchTimer);
+  if (val.length >= 2) {
+    placeSearchTimer = setTimeout(function(){ searchPlace(val); }, 400);
+  } else {
+    document.getElementById('psr').style.display = 'none';
+  }
+}
+
+async function searchPlace(val) {
+  if (!val || val.length < 2) return;
+  var box = document.getElementById('psr');
+  box.innerHTML = '<div class="sri" style="color:var(--muted);cursor:default;">Zoeken...</div>';
+  box.style.display = 'block';
+
+  try {
+    // Google Geocoding API - zoek plaatsnaam in Nederland
+    var url = 'https://maps.googleapis.com/maps/api/geocode/json?address='
+      + encodeURIComponent(val + ', Nederland')
+      + '&components=country:NL&key=' + GOOGLE_API_KEY;
+    var r = await fetchWithTimeout(url, { mode: 'cors' }, 8000);
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    var d = await r.json();
+
+    if (!d.results || d.results.length === 0) {
+      box.innerHTML = '<div class="sri" style="color:var(--muted);cursor:default;">Geen resultaat gevonden</div>';
+      return;
+    }
+
+    // Show up to 5 results
+    var results = d.results.slice(0, 5);
+    box.innerHTML = results.map(function(res) {
+      var lat = res.geometry.location.lat;
+      var lon = res.geometry.location.lng;
+      var name = res.address_components[0] ? res.address_components[0].long_name : val;
+      var fullAddr = res.formatted_address.replace(', Nederland', '').replace(', Netherlands', '');
+
+      // Find which gemeente contains this point
+      var gemName = '';
+      if (geoData) {
+        for (var i = 0; i < geoData.features.length; i++) {
+          var f = geoData.features[i];
+          var c = getCentroid(f);
+          if (Math.abs(lat - c[0]) < 0.3 && Math.abs(lon - c[1]) < 0.4) {
+            if (ptIn(lon, lat, f.geometry)) {
+              gemName = f.properties._name || '';
+              break;
+            }
+          }
+        }
+      }
+
+      return '<div class="sri" data-lat="'+lat+'" data-lon="'+lon+'" data-gem="'+gemName+'" onclick="pickPlace(this)">'
+        + '<div>'
+          + '<div style="font-weight:600;">'+name+'</div>'
+          + '<div style="font-size:11px;color:var(--muted);">'+(gemName?'Gemeente '+gemName+' · ':'')+fullAddr+'</div>'
+        + '</div>'
+        + '<span class="search-badge sb-gray" style="white-space:nowrap;">'+(gemName||'Onbekend')+'</span>'
+        + '</div>';
+    }).join('');
+
+  } catch(e) {
+    box.innerHTML = '<div class="sri" style="color:var(--muted);cursor:default;">Fout: ' + e.message + '</div>';
+  }
+}
+
+function pickPlace(el) {
+  var lat = parseFloat(el.getAttribute('data-lat'));
+  var lon = parseFloat(el.getAttribute('data-lon'));
+  var gemName = el.getAttribute('data-gem');
+  closePlaceSearch();
+  showTab('map');
+  setTimeout(function(){
+    MAP.setView([lat, lon], 13);
+    MAP.invalidateSize();
+    // Find and show the gemeente panel
+    if (gemName && geoData) {
+      geoData.features.forEach(function(f){
+        if (f.properties._name === gemName) {
+          showGemPanel(f);
+          // Highlight
+          if (geoLayer) geoLayer.eachLayer(function(layer){
+            if (layer.feature && layer.feature.properties._name === gemName) {
+              layer.setStyle({weight:3, color:'#2d7a3a'});
+              setTimeout(function(){ geoLayer.resetStyle(layer); }, 4000);
+            }
+          });
+        }
+      });
+    }
+  }, 80);
+}
+
+function closePlaceSearch() {
+  var inp = document.getElementById('place-search-input');
+  if (inp) inp.value = '';
+  var box = document.getElementById('psr');
+  if (box) box.style.display = 'none';
+}
+
+document.addEventListener('click', function(e){
+  if (!e.target.closest('#place-search-wrap')) {
+    var box = document.getElementById('psr');
+    if (box) box.style.display = 'none';
+  }
+});
 
 </script>
 </body>
