@@ -1035,7 +1035,7 @@ function fetchWithTimeout(url,opts,ms) {
 
 // ── LOAD DATA ─────────────────────────────────────────────────────────────
 function clearCache() {
-  try { localStorage.removeItem('gymdata_v2'); } catch(e){}
+  try { localStorage.removeItem('gymdata_v3'); } catch(e){}
   loaded = false;
   gyms = [];
   document.getElementById('btn-load').disabled = false;
@@ -1049,7 +1049,7 @@ async function startLoad() {
   document.getElementById('btn-load').disabled=true;
 
   // Check cache first
-  var cacheKey = 'gymdata_v2';
+  var cacheKey = 'gymdata_v3';
   var cached = null;
   try {
     var raw = localStorage.getItem(cacheKey);
@@ -1154,11 +1154,18 @@ async function startLoad() {
     setP(40+Math.round((bi/gemeenten.length)*45),'Gyms '+bi+'/'+gemeenten.length+'...');
     var promises=batch.map(function(gem){
       var radius=gem.pop>100000?8000:gem.pop>50000?6000:4000;
-      return fetchWithTimeout('https://places.googleapis.com/v1/places:searchText',{
-        method:'POST',mode:'cors',
-        headers:{'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_API_KEY,'X-Goog-FieldMask':'places.displayName,places.location'},
-        body:JSON.stringify({textQuery:'sportschool fitness gym sportcomplex health club crossfit',maxResultCount:20,locationBias:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:radius}}})
+      var headers={'Content-Type':'application/json','X-Goog-Api-Key':GOOGLE_API_KEY,'X-Goog-FieldMask':'places.displayName,places.location'};
+      // Zoekopdracht 1: op type (meest compleet)
+      var p1=fetchWithTimeout('https://places.googleapis.com/v1/places:searchNearby',{
+        method:'POST',mode:'cors',headers:headers,
+        body:JSON.stringify({includedTypes:['gym','fitness_center','sports_club','sports_complex','health','yoga_studio','martial_arts_school'],maxResultCount:20,locationRestriction:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:radius}}})
       },10000).then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];}).catch(function(){return [];});
+      // Zoekopdracht 2: op tekst (vangt locaties zonder standaard type)
+      var p2=fetchWithTimeout('https://places.googleapis.com/v1/places:searchText',{
+        method:'POST',mode:'cors',headers:headers,
+        body:JSON.stringify({textQuery:'sportschool fitness sportcentrum personal training',maxResultCount:20,locationBias:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:radius}}})
+      },10000).then(function(r){return r.ok?r.json().then(function(d){return d.places||[];}):[];}).catch(function(){return [];});
+      return Promise.all([p1,p2]).then(function(res){ return res[0].concat(res[1]); });
     });
     var results=await Promise.all(promises);
     results.forEach(function(places){
@@ -1181,7 +1188,7 @@ async function startLoad() {
   // Sla op in cache
   try {
     var cacheData = { ts: Date.now(), gyms: gyms.map(function(g){ return {lat:g.lat,lon:g.lon,name:g.name}; }) };
-    localStorage.setItem('gymdata_v2', JSON.stringify(cacheData));
+    localStorage.setItem('gymdata_v3', JSON.stringify(cacheData));
     dbg('info','Gyms opgeslagen in cache');
   } catch(e) { dbg('info','Cache opslaan mislukt: '+e.message); }
 
