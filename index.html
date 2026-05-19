@@ -1084,7 +1084,7 @@ function fetchWithTimeout(url,opts,ms) {
 
 // ── LOAD DATA ─────────────────────────────────────────────────────────────
 function clearCache() {
-  try { localStorage.removeItem('gymdata_v11'); } catch(e){}
+  try { localStorage.removeItem('gymdata_v12'); } catch(e){}
   loaded = false;
   gyms = [];
   document.getElementById('btn-load').disabled = false;
@@ -1098,7 +1098,7 @@ async function startLoad() {
   document.getElementById('btn-load').disabled=true;
 
   // Check cache first
-  var cacheKey = 'gymdata_v11';
+  var cacheKey = 'gymdata_v12';
   var cached = null;
   try {
     var raw = localStorage.getItem(cacheKey);
@@ -1243,7 +1243,7 @@ async function startLoad() {
     var r2=await Promise.all(batch2.map(function(gem){
       var radius=gem.pop>200000?12000:gem.pop>100000?10000:gem.pop>50000?8000:6000;
       return pSearch('https://places.googleapis.com/v1/places:searchText',{
-        textQuery:'sportschool fitness sportcentrum personal training sport studio',
+        textQuery:'sportschool fitness sportcentrum personal training',
         maxResultCount:20,
         locationBias:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:radius}}
       });
@@ -1255,11 +1255,16 @@ async function startLoad() {
   // FASE 3: Ketenzoekacties - 5 grote regio-ankers, batches van 3
   setP(80,'Fase 3/3: ketenlocaties ophalen...');
   var anchors=[
-    {lat:52.20,lon:4.90,r:80000},   // Randstad Noord (Amsterdam/Utrecht)
-    {lat:51.90,lon:4.50,r:80000},   // Randstad Zuid (Rotterdam/Den Haag)
-    {lat:51.50,lon:5.30,r:80000},   // Brabant (Eindhoven/Tilburg/Breda)
-    {lat:52.50,lon:6.10,r:80000},   // Oost (Zwolle/Enschede/Apeldoorn)
-    {lat:53.10,lon:6.40,r:80000},   // Noord (Groningen/Friesland/Drenthe)
+    {lat:52.37,lon:4.89,r:45000},   // Amsterdam
+    {lat:51.92,lon:4.48,r:45000},   // Rotterdam
+    {lat:52.09,lon:5.12,r:45000},   // Utrecht
+    {lat:51.44,lon:5.47,r:45000},   // Eindhoven
+    {lat:53.21,lon:6.56,r:45000},   // Groningen
+    {lat:51.57,lon:4.77,r:45000},   // Breda/Tilburg
+    {lat:52.51,lon:6.09,r:45000},   // Zwolle
+    {lat:52.22,lon:6.90,r:45000},   // Enschede
+    {lat:51.84,lon:5.86,r:45000},   // Nijmegen
+    {lat:52.15,lon:5.39,r:45000},   // Amersfoort
   ];
   var chains=['Basic Fit','GO Health','fit+','Anytime Fitness','Sportcity','HealthCity','FitForFree','OneFit'];
   for (var ci=0;ci<chains.length;ci++){
@@ -1284,7 +1289,7 @@ async function startLoad() {
   // Sla op in cache
   try {
     var cacheData = { ts: Date.now(), gyms: gyms.map(function(g){ return {lat:g.lat,lon:g.lon,name:g.name}; }) };
-    localStorage.setItem('gymdata_v11', JSON.stringify(cacheData));
+    localStorage.setItem('gymdata_v12', JSON.stringify(cacheData));
     dbg('info','Gyms opgeslagen in cache');
   } catch(e) { dbg('info','Cache opslaan mislukt: '+e.message); }
 
