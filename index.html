@@ -1084,7 +1084,7 @@ function fetchWithTimeout(url,opts,ms) {
 
 // ── LOAD DATA ─────────────────────────────────────────────────────────────
 function clearCache() {
-  try { localStorage.removeItem('gymdata_v7'); } catch(e){}
+  try { localStorage.removeItem('gymdata_v8'); } catch(e){}
   loaded = false;
   gyms = [];
   document.getElementById('btn-load').disabled = false;
@@ -1098,7 +1098,7 @@ async function startLoad() {
   document.getElementById('btn-load').disabled=true;
 
   // Check cache first
-  var cacheKey = 'gymdata_v7';
+  var cacheKey = 'gymdata_v8';
   var cached = null;
   try {
     var raw = localStorage.getItem(cacheKey);
@@ -1290,7 +1290,7 @@ async function startLoad() {
   // Sla op in cache
   try {
     var cacheData = { ts: Date.now(), gyms: gyms.map(function(g){ return {lat:g.lat,lon:g.lon,name:g.name}; }) };
-    localStorage.setItem('gymdata_v7', JSON.stringify(cacheData));
+    localStorage.setItem('gymdata_v8', JSON.stringify(cacheData));
     dbg('info','Gyms opgeslagen in cache');
   } catch(e) { dbg('info','Cache opslaan mislukt: '+e.message); }
 
@@ -1760,28 +1760,33 @@ async function searchPlace(val) {
 
   try {
     // Google Geocoding API - zoek plaatsnaam in Nederland
-    var url = 'https://maps.googleapis.com/maps/api/geocode/json?address='
-      + encodeURIComponent(val + ', Nederland')
-      + '&components=country:NL&key=' + GOOGLE_API_KEY;
-    var r = await fetchWithTimeout(url, { mode: 'cors' }, 8000);
+    // Nominatim (OpenStreetMap) - gratis, geen key nodig, uitstekend voor NL plaatsen
+    var url = 'https://nominatim.openstreetmap.org/search?q='
+      + encodeURIComponent(val)
+      + '&countrycodes=nl&format=json&addressdetails=1&limit=5';
+    var r = await fetchWithTimeout(url, {
+      mode: 'cors',
+      headers: { 'Accept-Language': 'nl', 'User-Agent': 'GymWhiteSpaceAnalyzer/1.0' }
+    }, 8000);
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    var d = await r.json();
+    var results = await r.json();
 
-    if (!d.results || d.results.length === 0) {
-      box.innerHTML = '<div class="sri" style="color:var(--muted);cursor:default;">Geen resultaat gevonden</div>';
+    if (!results || results.length === 0) {
+      box.innerHTML = '<div class="sri" style="color:var(--muted);cursor:default;">Geen resultaat gevonden voor "'+val+'"</div>';
       return;
     }
 
-    // Show up to 5 results
-    var results = d.results.slice(0, 5);
     box.innerHTML = results.map(function(res) {
-      var lat = res.geometry.location.lat;
-      var lon = res.geometry.location.lng;
-      var name = res.address_components[0] ? res.address_components[0].long_name : val;
-      var fullAddr = res.formatted_address.replace(', Nederland', '').replace(', Netherlands', '');
+      var lat = parseFloat(res.lat);
+      var lon = parseFloat(res.lon);
+      var addr = res.address || {};
+      var name = addr.village || addr.town || addr.city || addr.municipality || res.display_name.split(',')[0];
+      var gemeente = addr.municipality || addr.county || '';
+      var regio = [addr.state].filter(Boolean).join(', ');
 
-      // Find which gemeente contains this point
+      // Find which gemeente polygon contains this point
       var gemName = '';
+      var gemFeature = null;
       if (geoData) {
         for (var i = 0; i < geoData.features.length; i++) {
           var f = geoData.features[i];
@@ -1789,18 +1794,21 @@ async function searchPlace(val) {
           if (Math.abs(lat - c[0]) < 0.3 && Math.abs(lon - c[1]) < 0.4) {
             if (ptIn(lon, lat, f.geometry)) {
               gemName = f.properties._name || '';
+              gemFeature = f;
               break;
             }
           }
         }
       }
 
+      var subLabel = gemName ? 'Gemeente ' + gemName : gemeente || regio || '';
+
       return '<div class="sri" data-lat="'+lat+'" data-lon="'+lon+'" data-gem="'+gemName+'" onclick="pickPlace(this)">'
         + '<div>'
           + '<div style="font-weight:600;">'+name+'</div>'
-          + '<div style="font-size:11px;color:var(--muted);">'+(gemName?'Gemeente '+gemName+' · ':'')+fullAddr+'</div>'
+          + '<div style="font-size:11px;color:var(--muted);">'+subLabel+'</div>'
         + '</div>'
-        + '<span class="search-badge sb-gray" style="white-space:nowrap;">'+(gemName||'Onbekend')+'</span>'
+        + (gemName ? '<span class="search-badge sb-green" style="white-space:nowrap;">'+gemName+'</span>' : '<span class="search-badge sb-gray">–</span>')
         + '</div>';
     }).join('');
 
