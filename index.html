@@ -1149,23 +1149,23 @@ async function startLoad() {
     }
   } catch(e){ dbg('info','CBS fallback: '+e.message); }
 
-  // CBS Thuiswerk data (tabel 85462NED - Thuiswerk percentage per gemeente)
-  setP(12,'CBS thuiswerk data ophalen...');
+  // CBS Hoogopgeleiden per gemeente als thuiswerk-proxy (KWB tabel 85618NED)
+  setP(12,'CBS opleidingsniveau data ophalen...');
   try {
-    var thuisUrl='https://opendata.cbs.nl/ODataApi/odata/85462NED/TypedDataSet?$select=RegioS,ThuiswerkenAlsPercentageVanWerkenden_1&$filter=Perioden%20eq%20%272022JJ00%27&$top=500&$format=json';
-    var tr=await fetchWithTimeout(thuisUrl,{mode:'cors',headers:{'Accept':'application/json'}},12000);
+    var kwbUrl = "https://opendata.cbs.nl/ODataApi/odata/85618NED/TypedDataSet?$select=WijkenEnBuurten,HoogsteOpleidingHboWoGevolgd_46&$top=500&$format=json";
+    var tr = await fetchWithTimeout(kwbUrl, {mode:'cors', headers:{'Accept':'application/json'}}, 12000);
     if (tr.ok) {
-      var td=await tr.json();
-      var thuisCount=0;
+      var td = await tr.json();
+      var thuisCount = 0;
       (td.value||[]).forEach(function(row){
-        var code=(row.RegioS||'').trim();
-        var pct=parseFloat(row.ThuiswerkenAlsPercentageVanWerkenden_1)||0;
-        if(code.startsWith('GM')&&pct>0){THUIS_DATA[code]=pct;thuisCount++;}
+        var code = (row.WijkenEnBuurten||'').trim();
+        var pct = parseFloat(row.HoogsteOpleidingHboWoGevolgd_46)||0;
+        if (code.startsWith('GM') && pct > 0) { THUIS_DATA[code] = pct; thuisCount++; }
       });
-      if(thuisCount>50) dbg('ok','Thuiswerk data: '+thuisCount+' gemeenten');
-      else dbg('info','Thuiswerk data beperkt geladen');
+      if (thuisCount > 50) dbg('ok', 'Opleidingsniveau: ' + thuisCount + ' gemeenten geladen');
+      else dbg('info', 'Opleidingsniveau data beperkt: ' + thuisCount);
     }
-  } catch(e){ dbg('info','Thuiswerk data niet beschikbaar: '+e.message); }
+  } catch(e) { dbg('info', 'Opleidingsniveau niet beschikbaar: ' + e.message); }
 
   // GeoJSON
   setP(15,'Stap 2/3: gemeente grenzen laden...');
