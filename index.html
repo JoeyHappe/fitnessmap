@@ -933,7 +933,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="2"/><path d="M7 7V5m10 2V5M7 17v2m10-2v2"/></svg>Gyms per gemeente
         </button>
         <button class="lbtn" id="btn-inkomen" onclick="setMode('inkomen')">
-          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Thuiswerkers
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Gem. inkomen
         </button>
       </div>
 
@@ -1137,7 +1137,7 @@ async function startLoad() {
   setP(5,'Stap 1/3: CBS data ophalen...');
   try {
     var cbsUrl='https://opendata.cbs.nl/ODataApi/odata/03759ned/TypedDataSet?$select=RegioS,BevolkingAanHetBeginVanDePeriode_1&$filter=Perioden%20eq%20%272025JJ00%27%20and%20Geslacht%20eq%20%22T001038%22&$top=500&$format=json';
-    var r=await fetchWithTimeout(cbsUrl,{mode:'cors',headers:{'Accept':'application/json'}},12000);
+    var r=await fetchWithTimeout(cbsUrl,{mode:'cors',headers:{'Accept':'application/json'}},6000);
     if (r.ok) {
       var d=await r.json();
       var n=0;
