@@ -1151,7 +1151,7 @@ async function startLoad() {
   } catch(e){ dbg('info','CBS fallback: '+e.message); }
 
   // Hoogopgeleiden data (statisch, gebaseerd op CBS patronen)
-    dbg('info', 'Hoogopgeleiden data geladen: ' + Object.keys(THUIS_DATA).length + ' gemeenten');
+    dbg('info', 'Inkomen data geladen: ' + Object.keys(INKOMEN_DATA).length + ' gemeenten');
 
   // GeoJSON
   setP(15,'Stap 2/3: gemeente grenzen laden...');
