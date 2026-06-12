@@ -1036,8 +1036,8 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
         <div class="stat-grid">
           <div class="stat"><div class="sv" id="s-wine-shops" style="color:var(--wine);">–</div><div class="sl">Wijnwinkels</div></div>
           <div class="stat"><div class="sv" id="s-wine-gem">–</div><div class="sl">Gemeenten</div></div>
-          <div class="stat" onclick="showTab('wijn-kansen')" style="cursor:pointer;"><div class="sv" id="s-wine-opp" style="color:#1a5c2a;">–</div><div class="sl">Weinig wijnwinkels ↗</div></div>
-          <div class="stat"><div class="sv r" id="s-wine-sat">–</div><div class="sl">Verzadigd</div></div>
+          <div class="stat" onclick="showTab('wijn-kansen')" style="cursor:pointer;"><div class="sv" id="s-wine-opp" style="color:#1a5c2a;">–</div><div class="sl">Veel wijnwinkels ↗</div></div>
+          <div class="stat"><div class="sv r" id="s-wine-sat">–</div><div class="sl">Geen wijnwinkels</div></div>
         </div>
       </div>
       <div class="sec">
@@ -1055,10 +1055,10 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
       <div class="sec">
         <div class="stitle">Legenda</div>
         <div id="wine-legend">
-          <div class="li"><div class="sw" style="background:#1a5c2a"></div>Hoge kans (&gt;75)</div>
+          <div class="li"><div class="sw" style="background:#1a5c2a"></div>Veel wijnwinkels (&gt;75)</div>
           <div class="li"><div class="sw" style="background:#6ab87a"></div>Gemiddeld (45–75)</div>
-          <div class="li"><div class="sw" style="background:#f5c842"></div>Laag (25–45)</div>
-          <div class="li"><div class="sw" style="background:#c0392b"></div>Verzadigd (&lt;25)</div>
+          <div class="li"><div class="sw" style="background:#f5c842"></div>Weinig (25–45)</div>
+          <div class="li"><div class="sw" style="background:#c0392b"></div>Nauwelijks/geen (&lt;25)</div>
         </div>
       </div>
       <div class="sec">
@@ -2356,16 +2356,21 @@ function computeWineScores() {
   var ratioMap = {};
   geoData.features.forEach(function(f){
     var code = ((f.properties.statcode||f.properties.GM_CODE||'')).trim();
+    var name = f.properties.statnaam||f.properties.GM_NAAM||f.properties.name||'';
     var pop = CBS_POP[code] || f.properties._pop || 0;
     var wc = f.properties._wc || 0;
     if (!pop) pop = 12000;
-    f.properties._pop = f.properties._pop || pop;
-    // ratio = pop per wine shop (higher = more opportunity)
-    var ratio = (pop>=5000 && wc>0) ? pop/wc : (pop>=5000 && wc===0 ? pop*1.5 : 0);
+    // Always set _name, _code, _pop so popup and panels work
+    f.properties._code = code;
+    f.properties._name = name;
+    f.properties._pop = pop;
+    // ratio = wine shops per 10,000 inhabitants (higher = more shops = better for sales visits)
+    var ratio = (pop>=5000 && wc>0) ? (wc / pop) * 10000 : 0;
     f.properties._wineRatio = ratio;
     if (pop >= 5000) ratioMap[code] = ratio;
   });
 
+  // Score based on wine shop density: more shops per capita = higher score
   var ratios = Object.values(ratioMap).filter(function(r){ return r>0; }).sort(function(a,b){ return a-b; });
   var len = ratios.length;
   function pct(ratio) {
@@ -2378,8 +2383,10 @@ function computeWineScores() {
   geoData.features.forEach(function(f){
     var score = (f.properties._pop||0)>=5000 ? pct(f.properties._wineRatio||0) : 0;
     f.properties._wineScore = score;
-    if (score>70 && (f.properties._pop||0)>15000) opp++;
-    if ((f.properties._wc||0)>5 && score<40) sat++;
+    // High opportunity = high density of wine shops (lots of visits possible per day)
+    if (score>70 && (f.properties._wc||0)>=3) opp++;
+    // Low interest = no wine shops at all
+    if ((f.properties._wc||0)===0 && (f.properties._pop||0)>15000) sat++;
   });
   document.getElementById('s-wine-opp').textContent = opp;
   document.getElementById('s-wine-sat').textContent = sat;
@@ -2429,7 +2436,7 @@ function renderWineMap() {
         var wc = p._wc||0;
         var pop = p._pop||0;
         var iww = wc>0 ? Math.round(pop/wc).toLocaleString('nl-NL') : '–';
-        var ind = s>70&&pop>15000?'🟢 Hoge kans':s>40?'🟡 Gemiddeld':pop<5000?'⚪ Te klein':'🔴 Verzadigd';
+        var ind = s>70&&pop>5000?'🟢 Veel wijnwinkels':s>40?'🟡 Gemiddeld':pop<5000?'⚪ Te klein':'🔴 Weinig/geen wijnwinkels';
         layer.bindPopup(
           '<div style="font-size:13px;line-height:1.8;min-width:200px;">'
           +'<strong style="font-size:14px;">'+p._name+'</strong><br>'+ind
@@ -2463,7 +2470,7 @@ function setWineMode(m) {
   if (activeEl) activeEl.classList.add('active');
 
   var wineLegends = {
-    opp: '<div class="li"><div class="sw" style="background:#1a5c2a"></div>Hoge kans (&gt;75)</div><div class="li"><div class="sw" style="background:#2d8a3e"></div>Goed (60–75)</div><div class="li"><div class="sw" style="background:#6ab87a"></div>Gemiddeld (45–60)</div><div class="li"><div class="sw" style="background:#f5c842"></div>Laag (25–45)</div><div class="li"><div class="sw" style="background:#c0392b"></div>Verzadigd</div>',
+    opp: '<div class="li"><div class="sw" style="background:#1a5c2a"></div>Veel wijnwinkels (&gt;75)</div><div class="li"><div class="sw" style="background:#2d8a3e"></div>Goed (60–75)</div><div class="li"><div class="sw" style="background:#6ab87a"></div>Gemiddeld (45–60)</div><div class="li"><div class="sw" style="background:#f5c842"></div>Weinig (25–45)</div><div class="li"><div class="sw" style="background:#c0392b"></div>Nauwelijks/geen</div>',
     density: '<div class="li"><div class="sw" style="background:#6b0a0f"></div>&gt;10 wijnwinkels</div><div class="li"><div class="sw" style="background:#8b1a22"></div>6–10</div><div class="li"><div class="sw" style="background:#b03040"></div>3–5</div><div class="li"><div class="sw" style="background:#d4808a"></div>1–2</div><div class="li"><div class="sw" style="background:#f9edef;border:1px solid #ddd"></div>0 (potentieel)</div>',
     inkomen: '<div class="li"><div class="sw" style="background:#006d2c"></div>&gt;€45k (hoog)</div><div class="li"><div class="sw" style="background:#31a354"></div>€40–45k</div><div class="li"><div class="sw" style="background:#74c476"></div>€36–40k</div><div class="li"><div class="sw" style="background:#bae4b3"></div>€33–36k</div>'
   };
@@ -2495,7 +2502,7 @@ function showWineGemPanel(feature) {
   var iww = wc > 0 ? Math.round(pop/wc).toLocaleString('nl-NL') : '–';
   var inc = INKOMEN_DATA[((p.statcode||p.GM_CODE||'')).trim()] || 0;
   var scoreColor = s>=75?'#1a5c2a':s>=45?'#e07820':'#8b1a22';
-  var scoreLabel = s>=75?'Hoge kans':s>=60?'Goed':s>=45?'Gemiddeld':s>=25?'Laag':'Verzadigd';
+  var scoreLabel = s>=75?'Veel wijnwinkels':s>=60?'Goed':s>=45?'Gemiddeld':s>=25?'Weinig':'Nauwelijks/geen';
 
   document.getElementById('gem-panel-title').textContent = p._name;
   document.getElementById('gem-panel-meta').textContent = pop.toLocaleString('nl-NL')+' inwoners · '+wc+' wijnwinkels gevonden';
