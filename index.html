@@ -935,6 +935,16 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 #wine-search-input { padding:5px 28px 5px 10px; font-size:12px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:#1a1a1a; outline:none; width:185px; }
 #wine-search-input:focus { border-color:var(--wine); box-shadow:0 0 0 2px rgba(139,26,34,.12); }
 #wsr { display:none; position:absolute; top:34px; left:0; min-width:280px; background:#fff; border:1px solid var(--border); border-radius:8px; z-index:9999; max-height:280px; overflow-y:auto; box-shadow:0 4px 20px rgba(0,0,0,.12); }
+
+/* ── DRIVN TAB ── */
+:root {
+  --drivn: #1a3a5c;
+  --drivn-light: #2c5f8a;
+  --drivn-pale: #e8f0f8;
+}
+.mode-btn.active-drivn { background:var(--drivn); color:#fff; }
+#drivn-sidebar { width:265px; flex-shrink:0; background:var(--surface); border-right:1px solid var(--border); overflow-y:auto; display:none; flex-direction:column; }
+#drivn-tab-bar { display:none; flex-shrink:0; height:40px; padding:0 12px; gap:0; background:var(--surface); border-bottom:1px solid var(--border); align-items:center; }
 </style>
 </head>
 <body>
@@ -951,6 +961,7 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
       <div id="mode-toggle">
         <button class="mode-btn active-gym" id="btn-mode-gym" onclick="switchMode('gym')">🏋 Fitness</button>
         <button class="mode-btn" id="btn-mode-wine" onclick="switchMode('wine')">🍷 Wijn</button>
+        <button class="mode-btn" id="btn-mode-drivn" onclick="switchMode('drivn')">💼 Drivn</button>
       </div>
       <span class="hdr-badge">Google Places + CBS 2025</span>
       <button class="hdr-btn" onclick="showExport()">⬇ Export PDF</button>
@@ -1013,6 +1024,61 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
         <div class="stitle">Lagen</div>
         <div class="tr">Gym stippen<label class="tgl"><input type="checkbox" id="tog-dots" onchange="toggleDots(this)"><span class="ts"></span></label></div>
         <div class="tr">Gemeente namen<label class="tgl"><input type="checkbox" id="tog-names" onchange="toggleNames(this)"><span class="ts"></span></label></div>
+      </div>
+    </div>
+
+
+    <!-- ══ DRIVN SIDEBAR ══ -->
+    <div id="drivn-sidebar">
+      <div class="sec">
+        <div class="stitle">Flexwerklocaties laden</div>
+        <button class="btn-load" id="btn-load-drivn" onclick="startDrivnLoad()" style="background:var(--drivn);">Laad flexwerklocaties &amp; kaart</button>
+        <button onclick="clearDrivnCache()" style="width:100%;padding:6px;border-radius:var(--r);border:1px solid var(--border);background:none;color:var(--muted);font-size:11px;cursor:pointer;margin-top:5px;">↺ Ververs data (cache wissen)</button>
+        <div class="prog-wrap" id="drivn-prog-wrap">
+          <div class="prog-label" id="drivn-prog-label">Bezig...</div>
+          <div class="prog-track"><div class="prog-bar" id="drivn-prog-bar" style="background:var(--drivn);"></div></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="stitle" style="display:flex;justify-content:space-between;">Debug log <span onclick="document.getElementById('drivn-debug-log').innerHTML=''" style="cursor:pointer;font-size:10px;font-weight:400;">wis</span></div>
+        <div id="drivn-debug-log"></div>
+      </div>
+      <div class="sec">
+        <div class="stitle">Statistieken</div>
+        <div class="stat-grid">
+          <div class="stat"><div class="sv" id="s-drivn-locs" style="color:var(--drivn);">–</div><div class="sl">Flexwerklocaties</div></div>
+          <div class="stat"><div class="sv" id="s-drivn-gem">–</div><div class="sl">Gemeenten</div></div>
+          <div class="stat" onclick="showDrivnTab('drivn-kansen')" style="cursor:pointer;"><div class="sv" id="s-drivn-opp" style="color:#1a5c2a;">–</div><div class="sl">Hoge kans ↗</div></div>
+          <div class="stat"><div class="sv r" id="s-drivn-sat">–</div><div class="sl">Verzadigd</div></div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="stitle">Kaartlaag</div>
+        <button class="lbtn active" id="btn-drivn-opp" onclick="setDrivnMode('opp')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>Opportunity score
+        </button>
+        <button class="lbtn" id="btn-drivn-density" onclick="setDrivnMode('density')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Locaties per gemeente
+        </button>
+        <button class="lbtn" id="btn-drivn-inkomen" onclick="setDrivnMode('inkomen')">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Gem. inkomen
+        </button>
+      </div>
+      <div class="sec">
+        <div class="stitle">Legenda</div>
+        <div id="drivn-legend">
+          <div class="li"><div class="sw" style="background:#1a5c2a"></div>Hoge kans (&gt;75)</div>
+          <div class="li"><div class="sw" style="background:#2d8a3e"></div>Goed (60–75)</div>
+          <div class="li"><div class="sw" style="background:#6ab87a"></div>Gemiddeld (45–60)</div>
+          <div class="li"><div class="sw" style="background:#f5c842"></div>Laag (25–45)</div>
+          <div class="li"><div class="sw" style="background:#c0392b"></div>Verzadigd (&lt;25)</div>
+          <div class="li"><div class="sw" style="background:#d5d5d5"></div>Te kleine gemeente</div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="stitle">Lagen</div>
+        <div class="tr">Locatie stippen<label class="tgl"><input type="checkbox" id="tog-drivn-dots" onchange="toggleDrivnDots(this)"><span class="ts"></span></label></div>
+        <div class="tr">Gemeente namen<label class="tgl"><input type="checkbox" id="tog-drivn-names" onchange="toggleDrivnNames(this)"><span class="ts"></span></label></div>
       </div>
     </div>
 
@@ -1107,6 +1173,23 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
         <button onclick="showRapportSelect()" style="margin-left:auto;padding:5px 12px;border-radius:6px;background:var(--wine);color:#fff;border:none;font-size:11px;font-weight:600;cursor:pointer;">📋 Rapport gemeente</button>
       </div>
 
+
+      <div id="drivn-tab-bar" style="display:none;flex-shrink:0;height:40px;padding:0 12px;gap:0;background:var(--surface);border-bottom:1px solid var(--border);align-items:center;">
+        <button class="tab active" id="t-drivn-map" onclick="showDrivnTab('drivn-map')" style="border-bottom-color:var(--drivn);color:var(--drivn);">Kaart</button>
+        <button class="tab" id="t-drivn-kansen" onclick="showDrivnTab('drivn-kansen')">Top kansen</button>
+        <div id="drivn-search-wrap" style="position:relative;margin-left:8px;">
+          <input id="drivn-search-input" type="text" placeholder="Zoek gemeente..." oninput="onDrivnSearch(this.value)" onkeydown="onDrivnSearchKey(event)" style="padding:5px 28px 5px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:#1a1a1a;outline:none;width:170px;">
+          <span onclick="closeDrivnSearch()" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:13px;">✕</span>
+          <div id="dsr" style="display:none;position:absolute;top:34px;left:0;min-width:280px;background:#fff;border:1px solid var(--border);border-radius:8px;z-index:9999;max-height:280px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.12);"></div>
+        </div>
+        <div id="drivn-loc-search-wrap" style="position:relative;margin-left:8px;">
+          <input id="drivn-loc-input" type="text" placeholder="Zoek flexwerklocatie..." oninput="onDrivnLocSearch(this.value)" style="padding:5px 28px 5px 10px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:#1a1a1a;outline:none;width:185px;">
+          <span onclick="closeDrivnLocSearch()" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);cursor:pointer;color:var(--muted);font-size:13px;">✕</span>
+          <div id="dlocr" style="display:none;position:absolute;top:34px;left:0;min-width:280px;background:#fff;border:1px solid var(--border);border-radius:8px;z-index:9999;max-height:280px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,.12);"></div>
+        </div>
+        <button onclick="showDrivnRapportSelect()" style="margin-left:auto;padding:5px 12px;border-radius:6px;background:var(--drivn);color:#fff;border:none;font-size:11px;font-weight:600;cursor:pointer;">📋 Rapport gemeente</button>
+      </div>
+
       <!-- ══ MAP (shared) ══ -->
       <div id="tab-map" style="position:relative;flex:1;display:flex;">
         <div id="map"></div>
@@ -1146,6 +1229,20 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
           </div>
         </div>
         <div id="wijn-kansen-grid"><p style="color:var(--muted);font-size:13px;">Laad eerst de wijndata.</p></div>
+      </div>
+
+
+      <!-- ══ DRIVN: TOP KANSEN ══ -->
+      <div id="tab-drivn-kansen">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 0;flex-shrink:0;">
+          <div style="font-size:12px;color:var(--muted);" id="drivn-kansen-count"></div>
+          <div style="display:flex;gap:6px;">
+            <button onclick="setDrivnKansenFilter(50)" id="dkf-50" class="kf-btn active">Alle kansen</button>
+            <button onclick="setDrivnKansenFilter(70)" id="dkf-70" class="kf-btn">Hoge kans</button>
+            <button onclick="setDrivnKansenFilter(85)" id="dkf-85" class="kf-btn">Top kansen</button>
+          </div>
+        </div>
+        <div id="drivn-kansen-grid"><p style="color:var(--muted);font-size:13px;">Laad eerst de flexwerkdata.</p></div>
       </div>
 
     </div><!-- end #right -->
@@ -2080,50 +2177,58 @@ var currentAppMode = 'gym'; // 'gym' or 'wine'
 
 function switchMode(m) {
   currentAppMode = m;
+  var isGym  = m === 'gym';
   var isWine = m === 'wine';
+  var isDrivn = m === 'drivn';
 
-  // Toggle header
+  // Header
   var icon = document.getElementById('hdr-icon');
-  if (icon) icon.style.background = isWine ? 'var(--wine)' : 'var(--accent)';
+  if (icon) icon.style.background = isDrivn ? 'var(--drivn)' : isWine ? 'var(--wine)' : 'var(--accent)';
   var title = document.getElementById('hdr-title');
-  if (title) title.textContent = isWine ? 'Wijn Dealer Finder — Nederland' : 'Gym White Space Analyzer';
+  if (title) title.textContent = isDrivn ? 'Drivn — Flexwerk Locatie Finder' : isWine ? 'Wijn Dealer Finder — Nederland' : 'Gym White Space Analyzer';
   var sub = document.getElementById('hdr-sub');
-  if (sub) sub.textContent = isWine ? 'Wijnwinkels & Argentijnse wijn opportunities per gemeente' : 'Nederland — opportunity analyse per gemeente';
+  if (sub) sub.textContent = isDrivn ? 'Flexwerklocaties & opportunity analyse per gemeente' : isWine ? 'Wijnwinkels & Argentijnse wijn opportunities per gemeente' : 'Nederland — opportunity analyse per gemeente';
 
-  // Toggle mode buttons
-  document.getElementById('btn-mode-gym').className = 'mode-btn' + (isWine ? '' : ' active-gym');
-  document.getElementById('btn-mode-wine').className = 'mode-btn' + (isWine ? ' active-wine' : '');
+  // Mode buttons
+  document.getElementById('btn-mode-gym').className   = 'mode-btn' + (isGym   ? ' active-gym'   : '');
+  document.getElementById('btn-mode-wine').className  = 'mode-btn' + (isWine  ? ' active-wine'  : '');
+  document.getElementById('btn-mode-drivn').className = 'mode-btn' + (isDrivn ? ' active-drivn' : '');
 
-  // Toggle sidebars
-  document.getElementById('sidebar').style.display = isWine ? 'none' : 'flex';
-  document.getElementById('wine-sidebar').style.display = isWine ? 'flex' : 'none';
+  // Sidebars
+  document.getElementById('sidebar').style.display       = isGym   ? 'flex' : 'none';
+  document.getElementById('wine-sidebar').style.display  = isWine  ? 'flex' : 'none';
+  document.getElementById('drivn-sidebar').style.display = isDrivn ? 'flex' : 'none';
 
-  // Toggle tab bars
-  document.getElementById('tab-bar').style.display = isWine ? 'none' : 'flex';
-  document.getElementById('wine-tab-bar').style.display = isWine ? 'flex' : 'none';
+  // Tab bars
+  document.getElementById('tab-bar').style.display       = isGym   ? 'flex' : 'none';
+  document.getElementById('wine-tab-bar').style.display  = isWine  ? 'flex' : 'none';
+  document.getElementById('drivn-tab-bar').style.display = isDrivn ? 'flex' : 'none';
 
-  // Always show map tab, hide others
-  document.getElementById('tab-map').style.display = 'flex';
-  document.getElementById('tab-kansen').style.display = 'none';
+  // Always reset to map tab, hide list tabs
+  document.getElementById('tab-map').style.display         = 'flex';
+  document.getElementById('tab-kansen').style.display      = 'none';
   document.getElementById('tab-wijn-kansen').style.display = 'none';
+  document.getElementById('tab-drivn-kansen').style.display = 'none';
 
-  // Switch map layers
-  if (isWine) {
-    if (geoLayer) MAP.removeLayer(geoLayer);
-    if (dotLayer) MAP.removeLayer(dotLayer);
-    if (geoData) renderWineMap();
-    if (wineLoaded && wineDotLayer && document.getElementById('tog-wine-dots') && document.getElementById('tog-wine-dots').checked) {
-      wineDotLayer.addTo(MAP);
-    }
-  } else {
-    if (wineGeoLayer) MAP.removeLayer(wineGeoLayer);
-    if (wineDotLayer) MAP.removeLayer(wineDotLayer);
-    if (loaded) {
-      renderMap();
-      if (document.getElementById('tog-dots') && document.getElementById('tog-dots').checked) {
-        dotLayer.addTo(MAP);
-      }
-    }
+  // Remove all layers, then add the right one
+  if (geoLayer)   MAP.removeLayer(geoLayer);
+  if (dotLayer)   MAP.removeLayer(dotLayer);
+  if (wineGeoLayer)  MAP.removeLayer(wineGeoLayer);
+  if (wineDotLayer)  MAP.removeLayer(wineDotLayer);
+  if (drivnGeoLayer) MAP.removeLayer(drivnGeoLayer);
+  if (drivnDotLayer) MAP.removeLayer(drivnDotLayer);
+
+  if (isGym && loaded) {
+    renderMap();
+    if (document.getElementById('tog-dots') && document.getElementById('tog-dots').checked) dotLayer.addTo(MAP);
+  }
+  if (isWine && geoData) {
+    renderWineMap();
+    if (wineLoaded && wineDotLayer && document.getElementById('tog-wine-dots') && document.getElementById('tog-wine-dots').checked) wineDotLayer.addTo(MAP);
+  }
+  if (isDrivn && geoData) {
+    renderDrivnMap();
+    if (drivnLoaded && drivnDotLayer && document.getElementById('tog-drivn-dots') && document.getElementById('tog-drivn-dots').checked) drivnDotLayer.addTo(MAP);
   }
 
   setTimeout(function(){ MAP.invalidateSize(); }, 80);
@@ -2841,6 +2946,647 @@ document.addEventListener('click', function(e){
   if (e.target === document.getElementById('rapport-modal')) {
     closeRapport();
   }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// ── DRIVN — FLEXWERK LOCATIE FINDER ──────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+
+var drivnLocs      = [];
+var drivnDotLayer  = null;
+var drivnGeoLayer  = null;
+var drivnMode      = 'opp';
+var drivnLoaded    = false;
+var drivnSearchIdx = [];
+var drivnMinKansen = 50;
+var DRIVN_CACHE    = 'drivndata_v1';
+
+// ── Helpers ───────────────────────────────────────────────────────
+
+function ddbg(type, msg) {
+  var log = document.getElementById('drivn-debug-log');
+  if (!log) return;
+  var color = type==='ok'?'#2d7a3a':type==='err'?'#b83232':'#888';
+  var t = new Date().toLocaleTimeString('nl-NL',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  log.innerHTML += '<div style="color:'+color+';border-bottom:1px solid #eee;padding:2px 0;">['+t+'] '+msg+'</div>';
+  log.scrollTop = log.scrollHeight;
+}
+
+function setDrivnP(pct, txt) {
+  document.getElementById('drivn-prog-wrap').style.display = 'block';
+  document.getElementById('drivn-prog-bar').style.width = pct+'%';
+  document.getElementById('drivn-prog-label').textContent = txt;
+  if (pct >= 100) setTimeout(function(){ document.getElementById('drivn-prog-wrap').style.display='none'; }, 1000);
+}
+
+function clearDrivnCache() {
+  try { localStorage.removeItem(DRIVN_CACHE); } catch(e){}
+  drivnLoaded = false;
+  drivnLocs = [];
+  document.getElementById('btn-load-drivn').disabled = false;
+  document.getElementById('s-drivn-locs').textContent = '–';
+  if (drivnDotLayer) drivnDotLayer.clearLayers();
+  ddbg('info','Drivn cache gewist');
+}
+
+// ── Load ─────────────────────────────────────────────────────────
+
+async function startDrivnLoad() {
+  if (drivnLoaded) return;
+  document.getElementById('btn-load-drivn').disabled = true;
+
+  // Check cache
+  var cached = null;
+  try {
+    var raw = localStorage.getItem(DRIVN_CACHE);
+    if (raw) {
+      cached = JSON.parse(raw);
+      var age = Date.now() - cached.ts;
+      if (age < 24*60*60*1000) {
+        ddbg('ok','Cache geladen: '+cached.locs.length+' locaties ('+Math.round(age/60000)+' min oud)');
+      } else { cached = null; localStorage.removeItem(DRIVN_CACHE); }
+    }
+  } catch(e) { cached = null; }
+
+  // Load GeoJSON if needed
+  if (!geoData) {
+    setDrivnP(10, 'Gemeentegrenzen laden...');
+    for (var gi=0; gi<GEOJSON_SOURCES.length; gi++) {
+      try {
+        var gr = await fetchWithTimeout(GEOJSON_SOURCES[gi],{mode:'cors'},22000);
+        if (!gr.ok) throw new Error('HTTP '+gr.status);
+        geoData = await gr.json();
+        if (geoData && geoData.features && geoData.features.length > 10) {
+          ddbg('ok','GeoJSON: '+geoData.features.length+' gemeenten');
+          document.getElementById('s-drivn-gem').textContent = geoData.features.length;
+          break;
+        }
+      } catch(e){ ddbg('err','GeoJSON bron '+gi+': '+e.message); }
+    }
+    if (!geoData) {
+      ddbg('err','Kaartdata niet geladen');
+      document.getElementById('btn-load-drivn').disabled = false;
+      return;
+    }
+  } else {
+    document.getElementById('s-drivn-gem').textContent = geoData.features.length;
+  }
+
+  if (!drivnDotLayer) drivnDotLayer = L.layerGroup();
+
+  setDrivnP(25, 'Flexwerklocaties ophalen via Google Places...');
+
+  if (cached) {
+    drivnLocs = cached.locs;
+    drivnLocs.forEach(function(s){
+      L.circleMarker([s.lat,s.lon],{radius:5,fillColor:'var(--drivn,#1a3a5c)',color:'#fff',weight:1.5,fillOpacity:.9})
+        .bindPopup('<b>'+s.name+'</b><br><small style="color:#888;">'+s.type+'</small>')
+        .addTo(drivnDotLayer);
+    });
+    document.getElementById('s-drivn-locs').textContent = drivnLocs.length;
+    ddbg('ok','Locaties uit cache: '+drivnLocs.length);
+    finishDrivnLoad();
+    return;
+  }
+
+  // Google Places search
+  var gemeenten = [];
+  geoData.features.forEach(function(f){
+    var code = ((f.properties.statcode||f.properties.GM_CODE||'')).trim();
+    var pop  = CBS_POP[code]||0;
+    var name = f.properties.statnaam||f.properties.GM_NAAM||'';
+    if (pop >= 10000) {
+      var c = getCentroid(f);
+      gemeenten.push({name:name, lat:c[0], lon:c[1], pop:pop});
+    }
+  });
+  ddbg('info','Google Places: '+gemeenten.length+' gemeenten doorzoeken...');
+
+  var seenDrivn = {};
+  var dHeaders = {
+    'Content-Type':'application/json',
+    'X-Goog-Api-Key': GOOGLE_API_KEY,
+    'X-Goog-FieldMask':'places.displayName,places.location,places.types,places.primaryType'
+  };
+
+  function addDrivnPlaces(places, type) {
+    places.forEach(function(p){
+      if (!p.location) return;
+      var lat = p.location.latitude, lon = p.location.longitude;
+      var key = Math.round(lat*10000)+'_'+Math.round(lon*10000);
+      if (seenDrivn[key]) return;
+      seenDrivn[key] = true;
+      var name = (p.displayName&&p.displayName.text)||'Flexwerklocatie';
+      drivnLocs.push({lat:lat, lon:lon, name:name, type:type});
+      L.circleMarker([lat,lon],{radius:5,fillColor:'#1a3a5c',color:'#fff',weight:1.5,fillOpacity:.9})
+        .bindPopup('<b>'+name+'</b><br><small style="color:#888;">'+type+'</small>')
+        .addTo(drivnDotLayer);
+    });
+    document.getElementById('s-drivn-locs').textContent = drivnLocs.length;
+  }
+
+  function dSearch(url, body) {
+    return fetchWithTimeout(url,{method:'POST',mode:'cors',headers:dHeaders,body:JSON.stringify(body)},12000)
+      .then(function(r){ return r.ok ? r.json().then(function(d){ return d.places||[]; }) : []; })
+      .catch(function(){ return []; });
+  }
+
+  var batchSize = 8;
+
+  // Phase 1: type-based search (coworking spaces)
+  setDrivnP(30, 'Fase 1/3: coworking spaces...');
+  for (var bi=0; bi<gemeenten.length; bi+=batchSize) {
+    var batch = gemeenten.slice(bi, bi+batchSize);
+    setDrivnP(30+Math.round((bi/gemeenten.length)*20), 'Fase 1: gemeente '+(bi+1)+'/'+gemeenten.length+'...');
+    var r1 = await Promise.all(batch.map(function(gem){
+      var r = gem.pop>200000?12000:gem.pop>100000?8000:gem.pop>50000?6000:5000;
+      return dSearch('https://places.googleapis.com/v1/places:searchNearby',{
+        includedTypes:['coworking_space'],
+        maxResultCount:20,
+        locationRestriction:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:r}}
+      });
+    }));
+    r1.forEach(function(places){ addDrivnPlaces(places,'coworking space'); });
+    await new Promise(function(res){ setTimeout(res,100); });
+  }
+
+  // Phase 2: text search flexwerklocaties
+  setDrivnP(50, 'Fase 2/3: flexwerkplekken...');
+  for (var bi2=0; bi2<gemeenten.length; bi2+=batchSize) {
+    var batch2 = gemeenten.slice(bi2, bi2+batchSize);
+    setDrivnP(50+Math.round((bi2/gemeenten.length)*20), 'Fase 2: gemeente '+(bi2+1)+'/'+gemeenten.length+'...');
+    var r2 = await Promise.all(batch2.map(function(gem){
+      var r = gem.pop>200000?12000:gem.pop>50000?7000:5000;
+      return dSearch('https://places.googleapis.com/v1/places:searchText',{
+        textQuery:'flexwerkplek coworking flexkantoor werkplek huren',
+        maxResultCount:15,
+        locationBias:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:r}}
+      });
+    }));
+    r2.forEach(function(places){ addDrivnPlaces(places,'flexwerkplek'); });
+    await new Promise(function(res){ setTimeout(res,100); });
+  }
+
+  // Phase 3: business centres / serviced offices
+  setDrivnP(70, 'Fase 3/3: business centers...');
+  for (var bi3=0; bi3<gemeenten.length; bi3+=batchSize) {
+    var batch3 = gemeenten.slice(bi3, bi3+batchSize);
+    setDrivnP(70+Math.round((bi3/gemeenten.length)*15), 'Fase 3: gemeente '+(bi3+1)+'/'+gemeenten.length+'...');
+    var r3 = await Promise.all(batch3.map(function(gem){
+      var r = gem.pop>200000?12000:gem.pop>50000?7000:5000;
+      return dSearch('https://places.googleapis.com/v1/places:searchText',{
+        textQuery:'business center serviced office flex office werkruimte',
+        maxResultCount:10,
+        locationBias:{circle:{center:{latitude:gem.lat,longitude:gem.lon},radius:r}}
+      });
+    }));
+    r3.forEach(function(places){ addDrivnPlaces(places,'business center'); });
+    await new Promise(function(res){ setTimeout(res,100); });
+  }
+
+  // Save cache
+  try {
+    localStorage.setItem(DRIVN_CACHE, JSON.stringify({ts:Date.now(), locs:drivnLocs.map(function(s){ return {lat:s.lat,lon:s.lon,name:s.name,type:s.type}; })}));
+    ddbg('info','Data opgeslagen in cache');
+  } catch(e) { ddbg('info','Cache opslaan mislukt'); }
+
+  finishDrivnLoad();
+}
+
+function finishDrivnLoad() {
+  // Map locs to gemeenten, set _name/_code/_pop
+  if (geoData) {
+    geoData.features.forEach(function(f){
+      var code = ((f.properties.statcode||f.properties.GM_CODE||'')).trim();
+      var name = f.properties.statnaam||f.properties.GM_NAAM||'';
+      var pop  = CBS_POP[code]||0;
+      f.properties._code = code;
+      f.properties._name = name;
+      f.properties._pop  = pop;
+      var names = [];
+      if (drivnLocs.length > 0) {
+        var c = getCentroid(f);
+        drivnLocs.forEach(function(s){
+          if (Math.abs(s.lat-c[0])>.3 || Math.abs(s.lon-c[1])>.4) return;
+          if (ptIn(s.lon, s.lat, f.geometry)) names.push(s.name);
+        });
+      }
+      f.properties._drivnNames = names;
+      f.properties._dc = names.length;
+    });
+  }
+  computeDrivnScores();
+  renderDrivnMap();
+  buildDrivnTopList();
+  buildDrivnSearchIdx();
+  setDrivnP(100,'Klaar — '+drivnLocs.length+' flexwerklocaties gevonden');
+  MAP.invalidateSize();
+  drivnLoaded = true;
+  document.getElementById('btn-load-drivn').disabled = false;
+}
+
+// ── Scoring ───────────────────────────────────────────────────────
+// Opportunity = hoog inkomen + veel werkenden + weinig concurrentie
+// Score hoog = WEINIG bestaande flexwerklocaties + hoog inkomen + grote bevolking
+// (omgekeerd van wijn: hier zoeken we witte vlekken zoals gym)
+
+function computeDrivnScores() {
+  if (!geoData) return;
+  var ratioMap = {};
+
+  geoData.features.forEach(function(f){
+    var code = ((f.properties.statcode||f.properties.GM_CODE||'')).trim();
+    var name = f.properties.statnaam||f.properties.GM_NAAM||'';
+    var pop  = CBS_POP[code] || f.properties._pop || 0;
+    var dc   = f.properties._dc || 0;
+    var inc  = INKOMEN_DATA[code] || 0;
+    if (!pop) pop = 12000;
+    f.properties._code = code;
+    f.properties._name = name;
+    f.properties._pop  = pop;
+
+    // Opportunity ratio: pop per flexwerklocatie (higher = more potential per location = white spot)
+    // Weighted by income (high income area = more ZZP/remote worker demand)
+    var incFactor = inc >= 40000 ? 1.3 : inc >= 35000 ? 1.1 : inc >= 30000 ? 1.0 : 0.85;
+    var ratio = pop >= 10000
+      ? (dc > 0 ? (pop / dc) * incFactor : pop * 1.5 * incFactor)
+      : 0;
+    f.properties._drivnRatio = ratio;
+    if (pop >= 10000) ratioMap[code] = ratio;
+  });
+
+  var ratios = Object.values(ratioMap).filter(function(r){ return r>0; }).sort(function(a,b){ return a-b; });
+  var len = ratios.length;
+  function pct(ratio) {
+    if (!ratio||ratio<=0) return 0;
+    var pos = ratios.filter(function(r){ return r<=ratio; }).length;
+    return Math.round((pos/len)*100);
+  }
+
+  var opp=0, sat=0;
+  geoData.features.forEach(function(f){
+    var score = (f.properties._pop||0)>=10000 ? pct(f.properties._drivnRatio||0) : 0;
+    f.properties._drivnScore = score;
+    if (score>75 && (f.properties._pop||0)>20000) opp++;
+    if ((f.properties._dc||0)>5 && score<30) sat++;
+  });
+  document.getElementById('s-drivn-opp').textContent = opp;
+  document.getElementById('s-drivn-sat').textContent = sat;
+}
+
+// ── Map rendering ─────────────────────────────────────────────────
+
+function getDrivnColor(f) {
+  var s   = f.properties._drivnScore || 0;
+  var p   = f.properties._pop || 0;
+  var dc  = f.properties._dc || 0;
+  var inc = INKOMEN_DATA[((f.properties.statcode||f.properties.GM_CODE||'')).trim()] || 0;
+
+  if (drivnMode === 'opp') {
+    if (!p || p<10000) return '#d5d5d5';
+    if (s>75) return '#1a5c2a'; if (s>60) return '#2d8a3e';
+    if (s>45) return '#6ab87a'; if (s>25) return '#f5c842';
+    return '#c0392b';
+  }
+  if (drivnMode === 'density') {
+    if (dc>10) return '#0a1f35'; if (dc>5) return '#1a3a5c';
+    if (dc>2) return '#2c5f8a'; if (dc>0) return '#7aaecf';
+    if (p>10000) return '#e8f0f8'; return '#f5f5f5';
+  }
+  if (drivnMode === 'inkomen') {
+    if (!inc) return '#eeeeee';
+    if (inc>=45000) return '#006d2c'; if (inc>=40000) return '#31a354';
+    if (inc>=36000) return '#74c476'; if (inc>=33000) return '#bae4b3';
+    return '#edf8e9';
+  }
+  return '#d5d5d5';
+}
+
+function renderDrivnMap() {
+  if (!geoData) return;
+  if (drivnGeoLayer) MAP.removeLayer(drivnGeoLayer);
+
+  drivnGeoLayer = L.geoJSON(geoData, {
+    style: function(f){ return {fillColor:getDrivnColor(f), fillOpacity:.72, color:'#777', weight:.5}; },
+    onEachFeature: function(f, layer) {
+      var p = f.properties;
+      layer.on('click', function(){
+        var s  = p._drivnScore||0;
+        var dc = p._dc||0;
+        var pop = p._pop||0;
+        var ppf = dc>0 ? Math.round(pop/dc).toLocaleString('nl-NL') : '–';
+        var ind = s>75&&pop>20000?'🟢 Hoge kans':s>45?'🟡 Gemiddeld':pop<10000?'⚪ Te klein':'🔴 Verzadigd';
+        layer.bindPopup(
+          '<div style="font-size:13px;line-height:1.8;min-width:200px;">'
+          +'<strong style="font-size:14px;">'+(p._name||'–')+'</strong><br>'+ind
+          +'<hr style="margin:5px 0;border-color:#ddd;">'
+          +'Inwoners: <b>'+(pop||0).toLocaleString('nl-NL')+'</b><br>'
+          +'Flexwerklocaties: <b>'+dc+'</b><br>'
+          +'Score: <b>'+s+'/100</b><br>'
+          +(dc>0?'Inw./locatie: <b>'+ppf+'</b>':'<span style="color:#e07820">Witte vlek — nog geen flexwerklocatie</span>')
+          +'<br><br><button onclick="generateDrivnRapport(\''+p._name+'\')" style="padding:5px 10px;background:var(--drivn,#1a3a5c);color:#fff;border:none;border-radius:5px;cursor:pointer;font-size:11px;">📋 AI Rapport genereren</button>'
+          +'</div>'
+        ).openPopup();
+        showDrivnGemPanel(f);
+      });
+      layer.on('mouseover', function(){ layer.setStyle({weight:2,color:'#1a3a5c'}); });
+      layer.on('mouseout',  function(){ drivnGeoLayer.resetStyle(layer); });
+    }
+  }).addTo(MAP);
+
+  if (drivnDotLayer && document.getElementById('tog-drivn-dots') && document.getElementById('tog-drivn-dots').checked) {
+    drivnDotLayer.addTo(MAP);
+  }
+}
+
+function setDrivnMode(m) {
+  drivnMode = m;
+  ['opp','density','inkomen'].forEach(function(id){
+    var el = document.getElementById('btn-drivn-'+id);
+    if (el) el.classList.remove('active');
+  });
+  var el = document.getElementById('btn-drivn-'+m);
+  if (el) el.classList.add('active');
+  var legends = {
+    opp:     '<div class="li"><div class="sw" style="background:#1a5c2a"></div>Hoge kans (&gt;75)</div><div class="li"><div class="sw" style="background:#2d8a3e"></div>Goed (60–75)</div><div class="li"><div class="sw" style="background:#6ab87a"></div>Gemiddeld (45–60)</div><div class="li"><div class="sw" style="background:#f5c842"></div>Laag (25–45)</div><div class="li"><div class="sw" style="background:#c0392b"></div>Verzadigd (&lt;25)</div><div class="li"><div class="sw" style="background:#d5d5d5"></div>Te kleine gemeente</div>',
+    density: '<div class="li"><div class="sw" style="background:#0a1f35"></div>&gt;10 locaties</div><div class="li"><div class="sw" style="background:#1a3a5c"></div>6–10</div><div class="li"><div class="sw" style="background:#2c5f8a"></div>3–5</div><div class="li"><div class="sw" style="background:#7aaecf"></div>1–2</div><div class="li"><div class="sw" style="background:#e8f0f8;border:1px solid #ddd"></div>0 (witte vlek)</div>',
+    inkomen: '<div class="li"><div class="sw" style="background:#006d2c"></div>&gt;€45k (hoog)</div><div class="li"><div class="sw" style="background:#31a354"></div>€40–45k</div><div class="li"><div class="sw" style="background:#74c476"></div>€36–40k</div><div class="li"><div class="sw" style="background:#bae4b3"></div>€33–36k</div>'
+  };
+  document.getElementById('drivn-legend').innerHTML = legends[m] || legends.opp;
+  if (geoData) renderDrivnMap();
+}
+
+function toggleDrivnDots(el) {
+  if (!drivnDotLayer) return;
+  el.checked ? drivnDotLayer.addTo(MAP) : MAP.removeLayer(drivnDotLayer);
+}
+
+function toggleDrivnNames(el) {
+  if (!drivnGeoLayer) return;
+  drivnGeoLayer.eachLayer(function(layer){
+    if (el.checked && layer.feature && layer.feature.properties._name)
+      layer.bindTooltip(layer.feature.properties._name, {permanent:true, direction:'center'});
+    else layer.unbindTooltip();
+  });
+}
+
+// ── Gem panel ─────────────────────────────────────────────────────
+
+function showDrivnGemPanel(feature) {
+  var p   = feature.properties;
+  var s   = p._drivnScore || 0;
+  var pop = p._pop || 0;
+  var dc  = p._dc || 0;
+  var ppf = dc>0 ? Math.round(pop/dc).toLocaleString('nl-NL') : '–';
+  var scoreColor = s>=75?'#1a5c2a':s>=45?'#e07820':'#8b1a22';
+  var scoreLabel = s>=75?'Hoge kans':s>=60?'Goed':s>=45?'Gemiddeld':s>=25?'Laag':'Verzadigd';
+  var locTags = (p._drivnNames||[]).map(function(n){
+    return '<span style="display:inline-block;background:#e8f0f8;border:1px solid rgba(26,58,92,.2);border-radius:4px;padding:2px 7px;font-size:10px;margin:2px 2px 0 0;color:#1a3a5c;">💼 '+n+'</span>';
+  }).join('') || '<span style="font-size:12px;color:var(--muted);">Witte vlek — geen flexwerklocatie gevonden</span>';
+
+  document.getElementById('gem-panel-title').textContent = p._name || '–';
+  document.getElementById('gem-panel-meta').textContent  = pop.toLocaleString('nl-NL')+' inwoners · '+dc+' flexwerklocaties';
+
+  var c = getCentroid(feature);
+  document.getElementById('gem-panel-body').innerHTML =
+    '<div class="gp-score-row">'
+      +'<div class="gp-stat"><div class="gp-score-num" style="color:'+scoreColor+';">'+s+'</div><div class="gp-score-label">Drivn score /100</div></div>'
+      +'<div class="gp-stat"><div class="gp-stat-val">'+dc+'</div><div class="gp-stat-label">Flexwerklocaties</div></div>'
+      +'<div class="gp-stat"><div class="gp-stat-val">'+ppf+'</div><div class="gp-stat-label">Inw./locatie</div></div>'
+      +'<div class="gp-stat"><div class="gp-stat-val" style="color:'+scoreColor+';">'+scoreLabel+'</div><div class="gp-stat-label">Beoordeling</div></div>'
+    +'</div>'
+    +'<div class="gp-gyms-title" style="color:#1a3a5c;">Flexwerklocaties in '+(p._name||'–')+'</div>'
+    +locTags
+    +'<div style="margin-top:10px;">'
+      +'<button onclick="generateDrivnRapport(\'+p._name+\')" style="padding:6px 12px;background:#1a3a5c;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:600;margin-right:6px;">📋 AI Rapport</button>'
+      +'<button onclick="zoomGem('+c[0]+','+c[1]+')" style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid #1a3a5c;color:#1a3a5c;background:none;cursor:pointer;">Bekijk op kaart →</button>'
+    +'</div>';
+
+  document.getElementById('gem-panel').style.display = 'block';
+  setTimeout(function(){ MAP.invalidateSize(); }, 50);
+}
+
+// ── Top kansen ────────────────────────────────────────────────────
+
+function setDrivnKansenFilter(min) {
+  drivnMinKansen = min;
+  ['50','70','85'].forEach(function(id){
+    var el = document.getElementById('dkf-'+id);
+    if (el) el.classList.remove('active');
+  });
+  var el = document.getElementById('dkf-'+min);
+  if (el) el.classList.add('active');
+  buildDrivnTopList();
+}
+
+function buildDrivnTopList() {
+  if (!geoData) return;
+  var sorted = geoData.features
+    .filter(function(f){ return (f.properties._pop||0)>15000 && (f.properties._drivnScore||0)>=drivnMinKansen; })
+    .sort(function(a,b){ return b.properties._drivnScore - a.properties._drivnScore; });
+
+  var countEl = document.getElementById('drivn-kansen-count');
+  if (countEl) countEl.textContent = sorted.length+' gemeenten gevonden';
+
+  var html = '';
+  sorted.forEach(function(f,i){
+    var p   = f.properties, s = p._drivnScore||0;
+    var c   = getCentroid(f);
+    var dc  = p._dc||0;
+    var pop = p._pop||0;
+    var ppf = dc>0 ? Math.round(pop/dc).toLocaleString('nl-NL') : 'Witte vlek';
+    var inc = INKOMEN_DATA[((p.statcode||p.GM_CODE||'')).trim()] || 0;
+    var topCls = s>=85?' top3':'';
+    var locTags = (p._drivnNames||[]).slice(0,6).map(function(n){
+      return '<span style="display:inline-block;background:#e8f0f8;border:1px solid rgba(26,58,92,.2);border-radius:4px;padding:2px 7px;font-size:10px;margin:2px 2px 0 0;color:#1a3a5c;">'+n+'</span>';
+    }).join('') || '<span style="font-size:11px;color:var(--muted);">Witte vlek</span>';
+
+    html += '<div class="opp-card'+topCls+'" id="dcard-'+i+'">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer;" onclick="toggleDrivnCard(\'dcard-\'+i+\',\'ddetail-\'+i+\',\'dchev-\'+i+\','+c[0]+','+c[1]+')">"'
+        +'<div><div class="opp-name">'+(i+1)+'. '+(p._name||'–')+'</div>'
+        +'<div class="opp-meta">'+(pop||0).toLocaleString('nl-NL')+' inw. &nbsp;·&nbsp; '+dc+' locaties &nbsp;·&nbsp; '+ppf+' inw/locatie'+(inc?' &nbsp;·&nbsp; €'+Math.round(inc/1000)+'k inkomen':'')+'</div></div>'
+        +'<div style="display:flex;align-items:center;gap:8px;">'
+          +'<div style="text-align:right;"><div class="opp-score" style="color:#1a3a5c;">'+s+'</div><div class="opp-sub">/100</div></div>'
+          +'<div id="dchev-'+i+'" style="font-size:16px;color:var(--muted);">▸</div>'
+        +'</div>'
+      +'</div>'
+      +'<div id="ddetail-'+i+'" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">'
+        +'<div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:#1a3a5c;margin-bottom:6px;">Flexwerklocaties in '+(p._name||'–')+'</div>'
+        +locTags
+        +'<div style="margin-top:8px;display:flex;gap:6px;">'
+          +'<button onclick="zoomGem('+c[0]+','+c[1]+')" style="font-size:11px;padding:5px 10px;border-radius:6px;border:1px solid #1a3a5c;color:#1a3a5c;background:none;cursor:pointer;">Bekijk op kaart →</button>'
+          +'<button onclick="generateDrivnRapport(\'+p._name+\')" style="font-size:11px;padding:5px 10px;border-radius:6px;background:#1a3a5c;color:#fff;border:none;cursor:pointer;">📋 AI Rapport</button>'
+        +'</div>'
+      +'</div>'
+    +'</div>';
+  });
+  var grid = document.getElementById('drivn-kansen-grid');
+  if (grid) grid.innerHTML = html || '<p style="color:var(--muted)">Geen data.</p>';
+}
+
+function toggleDrivnCard(cardId, detailId, chevId) {
+  var detail = document.getElementById(detailId);
+  var chev   = document.getElementById(chevId);
+  var open   = detail.style.display === 'none';
+  detail.style.display = open ? 'block' : 'none';
+  chev.textContent = open ? '▾' : '▸';
+}
+
+// ── Tabs ─────────────────────────────────────────────────────────
+
+function showDrivnTab(name) {
+  ['drivn-map','drivn-kansen'].forEach(function(t){
+    var btn = document.getElementById('t-'+t);
+    if (btn) btn.classList.toggle('active', t===name);
+    var tab = document.getElementById('tab-'+t);
+    if (tab) tab.style.display = t===name ? 'flex' : 'none';
+  });
+  if (name==='drivn-map' && MAP) setTimeout(function(){ MAP.invalidateSize(); }, 50);
+}
+
+// ── Search ────────────────────────────────────────────────────────
+
+function buildDrivnSearchIdx() {
+  if (!geoData) return;
+  drivnSearchIdx = geoData.features
+    .filter(function(f){ return f.properties._name; })
+    .map(function(f){
+      var p=f.properties, c=getCentroid(f);
+      return {name:p._name, pop:p._pop||0, dc:p._dc||0, score:p._drivnScore||0, lat:c[0], lon:c[1]};
+    })
+    .sort(function(a,b){ return a.name.localeCompare(b.name,'nl'); });
+}
+
+function onDrivnSearch(val) {
+  var box = document.getElementById('dsr');
+  if (!val||val.length<2){ box.style.display='none'; return; }
+  var q = val.toLowerCase().trim();
+  var matches = drivnSearchIdx.filter(function(g){ return g.name.toLowerCase().indexOf(q)>=0; }).slice(0,10);
+  box.innerHTML = matches.length ? matches.map(function(g){
+    var cls = g.score>=75?'sb-green':g.score>=45?'sb-gray':'sb-red';
+    var lbl = g.score>=75?'Hoge kans':g.score>=45?'Gemiddeld':g.score>0?'Laag':'–';
+    return '<div class="sri" onclick="pickDrivnResult('+g.lat+','+g.lon+')">'
+      +'<div><b>'+g.name+'</b><div style="font-size:11px;color:var(--muted);">'+(g.pop||0).toLocaleString('nl-NL')+' inw. · '+g.dc+' locaties</div></div>'
+      +'<span class="search-badge '+cls+'">'+lbl+'</span>'
+      +'</div>';
+  }).join('') : '<div class="sri" style="color:var(--muted);cursor:default;">Geen resultaat</div>';
+  box.style.display = 'block';
+}
+
+function onDrivnSearchKey(e) {
+  if (e.key==='Escape'){ closeDrivnSearch(); return; }
+  if (e.key==='Enter'){ var first=document.querySelector('#dsr .sri'); if(first) first.click(); }
+}
+
+function pickDrivnResult(lat, lon) {
+  closeDrivnSearch();
+  showDrivnTab('drivn-map');
+  setTimeout(function(){ MAP.setView([lat,lon],12); MAP.invalidateSize(); }, 80);
+}
+
+function closeDrivnSearch() {
+  var inp = document.getElementById('drivn-search-input');
+  if (inp) inp.value = '';
+  var box = document.getElementById('dsr');
+  if (box) box.style.display = 'none';
+}
+
+function onDrivnLocSearch(val) {
+  var box = document.getElementById('dlocr');
+  if (!val||val.length<2){ box.style.display='none'; return; }
+  var q = val.toLowerCase().trim();
+  if (!drivnLocs.length){ box.innerHTML='<div class="sri" style="color:var(--muted);cursor:default;">Laad eerst de data</div>'; box.style.display='block'; return; }
+  var matches = drivnLocs.filter(function(s){ return s.name.toLowerCase().indexOf(q)>=0; }).slice(0,15);
+  box.innerHTML = matches.length ? matches.map(function(s){
+    return '<div class="sri" onclick="MAP.setView(['+s.lat+','+s.lon+'],16);document.getElementById(\'dlocr\').style.display=\'none\';">'
+      +'<div><div style="font-weight:600;">'+s.name+'</div>'
+      +'<div style="font-size:11px;color:var(--muted);">'+s.type+'</div></div>'
+      +'<span style="font-size:10px;padding:2px 7px;border-radius:10px;background:#e8f0f8;color:#1a3a5c;font-weight:600;">💼</span>'
+      +'</div>';
+  }).join('') : '<div class="sri" style="color:var(--muted);cursor:default;">Niet gevonden</div>';
+  box.style.display = 'block';
+}
+
+function closeDrivnLocSearch() {
+  var inp = document.getElementById('drivn-loc-input');
+  if (inp) inp.value = '';
+  document.getElementById('dlocr').style.display = 'none';
+}
+
+// ── AI Rapport ────────────────────────────────────────────────────
+
+function showDrivnRapportSelect() {
+  var names = geoData ? geoData.features
+    .filter(function(f){ return (f.properties._pop||0)>15000; })
+    .sort(function(a,b){ return (b.properties._drivnScore||0)-(a.properties._drivnScore||0); })
+    .slice(0,10).map(function(f){ return f.properties._name; }) : [];
+  if (!names.length){ alert('Laad eerst de data.'); return; }
+  var name = prompt('Gemeente naam voor AI rapport:\n\nTop kansen:\n'+names.join(', '), names[0]||'');
+  if (name) generateDrivnRapport(name.trim());
+}
+
+async function generateDrivnRapport(gemName) {
+  if (!gemName) return;
+  var feature = null;
+  if (geoData) geoData.features.forEach(function(f){ if (f.properties._name===gemName) feature=f; });
+  var p   = feature ? feature.properties : {};
+  var pop = (p._pop||0).toLocaleString('nl-NL');
+  var dc  = p._dc||0;
+  var s   = p._drivnScore||0;
+  var inc = INKOMEN_DATA[((p.statcode||p.GM_CODE||'')).trim()] || 0;
+  var locNames = (p._drivnNames||[]).join(', ') || 'Geen gevonden';
+
+  document.getElementById('rapport-title').textContent = '📋 Drivn locatie rapport — '+gemName;
+  document.getElementById('rapport-body').innerHTML = '<p class="rapport-loading">💼 AI rapport wordt gegenereerd voor '+gemName+'...<br><small style="color:#aaa;">Even geduld</small></p>';
+  document.getElementById('rapport-modal').style.display = 'flex';
+  currentRapportGemeente = gemName;
+
+  var prompt = 'Je bent een locatiestrategie expert voor Drivn, een Nederlandse flexwerk/coworking conceptformule gericht op ZZP\'ers en remote workers.\n\n'
+    +'Genereer een locatierapport voor: '+gemName+'\n\n'
+    +'Data:\n'
+    +'- Inwoners: '+pop+'\n'
+    +'- Bestaande flexwerklocaties gevonden: '+dc+'\n'
+    +'- Opportunity score: '+s+'/100 (hoog = weinig concurrentie + hoog potentieel)\n'
+    +(inc ? '- Gemiddeld inkomen: €'+inc.toLocaleString('nl-NL')+'\n' : '')
+    +'- Gevonden concurrenten: '+locNames+'\n\n'
+    +'Schrijf een strategisch locatierapport met:\n'
+    +'1. SAMENVATTING — is dit een kansrijke locatie voor Drivn?\n'
+    +'2. MARKTANALYSE — ZZP/remote worker profiel in deze gemeente\n'
+    +'3. CONCURRENTIEANALYSE — beoordeling van gevonden concurrenten\n'
+    +'4. LOCATIEADVIES — welk type locatie en buurt past het best\n'
+    +'5. KANSEN & RISICO\'S — concrete voor- en nadelen\n'
+    +'6. AANBEVELING — go / no-go met onderbouwing\n\n'
+    +'Schrijf in het Nederlands. Concreet, direct, zakelijk. Max 400 woorden.';
+
+  try {
+    var res = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,
+        system:'Je bent een locatiestrategie expert voor flexwerkconcepten. Geef altijd gestructureerde rapporten terug.',
+        messages:[{role:'user',content:prompt}]})
+    });
+    if (!res.ok) throw new Error('API error: '+res.status);
+    var data = await res.json();
+    var text = data.content[0].text
+      .replace(/\n\n/g,'<br><br>').replace(/\n/g,'<br>')
+      .replace(/(\d+\.\s+[A-ZÉÀÜ &'\/]+)\s*—/g,'<h4>$1</h4>');
+
+    document.getElementById('rapport-body').innerHTML =
+      '<div style="background:#e8f0f8;border-radius:8px;padding:12px 16px;margin-bottom:16px;border:1px solid rgba(26,58,92,.15);">'
+      +'<div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:#1a3a5c;margin-bottom:4px;">Gemeente</div>'
+      +'<div style="font-size:14px;font-weight:600;">'+gemName+'</div>'
+      +'<div style="font-size:12px;color:#666;margin-top:2px;">'+pop+' inwoners · '+dc+' flexwerklocaties · Score '+s+'/100'+(inc?' · €'+Math.round(inc/1000)+'k inkomen':'')+'</div>'
+      +'</div>'+text;
+  } catch(e) {
+    document.getElementById('rapport-body').innerHTML='<p style="color:#b83232;">Rapport mislukt: '+e.message+'</p>';
+  }
+}
+
+// Close dropdowns on outside click
+document.addEventListener('click', function(e){
+  if (!e.target.closest('#drivn-search-wrap'))   { var b=document.getElementById('dsr');   if(b) b.style.display='none'; }
+  if (!e.target.closest('#drivn-loc-search-wrap')){ var b2=document.getElementById('dlocr'); if(b2) b2.style.display='none'; }
 });
 
 </script>
