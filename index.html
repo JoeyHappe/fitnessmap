@@ -903,8 +903,10 @@ html,body{width:100%;height:100%;overflow:hidden;font-family:-apple-system,Blink
 .wine-score-low  { color:#8b1a22; }
 
 /* Wine kansen tab */
-#tab-wijn-kansen { flex:1; overflow-y:auto; padding:16px; display:none; }
+#tab-wijn-kansen  { flex:1; overflow-y:auto; padding:16px; display:none; }
 #wijn-kansen-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+#tab-drivn-kansen  { flex:1; overflow-y:auto; padding:16px; display:none; flex-direction:column; }
+#drivn-kansen-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
 .wijn-card { background:var(--bg); border:1px solid var(--border); border-radius:var(--r); padding:12px; transition:border-color .12s; }
 .wijn-card.top3 { border:2px solid var(--wine); background:var(--wine-pale); }
 .wijn-card-score { font-size:26px; font-weight:700; color:var(--wine); line-height:1; }
@@ -3435,10 +3437,13 @@ function toggleDrivnCard(cardId, detailId, chevId) {
 // ── Tabs ─────────────────────────────────────────────────────────
 
 function showDrivnTab(name) {
+  // 'drivn-map' maps to the shared #tab-map element
+  var tabMap = { 'drivn-map': 'map', 'drivn-kansen': 'drivn-kansen' };
   ['drivn-map','drivn-kansen'].forEach(function(t){
     var btn = document.getElementById('t-'+t);
     if (btn) btn.classList.toggle('active', t===name);
-    var tab = document.getElementById('tab-'+t);
+    var tabId = 'tab-' + tabMap[t];
+    var tab = document.getElementById(tabId);
     if (tab) tab.style.display = t===name ? 'flex' : 'none';
   });
   if (name==='drivn-map' && MAP) setTimeout(function(){ MAP.invalidateSize(); }, 50);
